@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 
 import click
 
@@ -285,11 +286,35 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
 @click.option("--body", default=None, help="Body content (markdown). Use '-' for stdin.")
 @click.option("--publish", is_flag=True, help="Publish after update")
 @click.option("--raw", is_flag=True, help="Treat field values as raw JSON")
+@click.option(
+    "--append-block", "append_blocks", multiple=True,
+    help="Append a JSON block to body StreamField (repeatable).",
+)
+@click.option(
+    "--insert-block", "insert_blocks", nargs=2, multiple=True,
+    metavar="INDEX JSON",
+    help="Insert a JSON block at INDEX in body StreamField (repeatable).",
+)
 @pass_ctx
 @handle_api_errors
-def update(ctx: Context, page_id, title, slug, fields, body, publish, raw):
-    """Update an existing page (PATCH semantics)."""
+def update(ctx: Context, page_id, title, slug, fields, body, publish, raw,
+           append_blocks, insert_blocks):
+    """Update an existing page (PATCH semantics).
+
+    Use --append-block or --insert-block to add blocks to an existing
+    StreamField body without replacing the whole thing. These flags fetch the
+    current body, splice in the new block(s), and send the result.
+
+    \b
+    Examples:
+      wagapi pages update 42 --append-block '{"type":"image","value":7}'
+      wagapi pages update 42 --insert-block 1 '{"type":"paragraph","value":"<p>New</p>"}'
+    """
     _require_client(ctx)
+
+    has_block_ops = bool(append_blocks or insert_blocks)
+    if has_block_ops and body is not None:
+        raise UsageError("Cannot use --append-block/--insert-block together with --body.")
 
     data: dict = {}
 
@@ -319,11 +344,57 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw):
             else:
                 data["body"] = markdown_to_richtext(body)
 
+    if has_block_ops:
+        page_data = ctx.client.get_page(page_id)
+        existing_body = page_data.get("body")
+        if existing_body is None:
+            existing_body = []
+        if not isinstance(existing_body, list):
+            raise UsageError(
+                "body field is not a StreamField (not a JSON array). "
+                "Use --body instead."
+            )
+        new_body = list(existing_body)
+
+        # Process inserts (reverse-sort by index to preserve positions)
+        parsed_inserts = []
+        for idx_str, block_json in insert_blocks:
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                raise UsageError(f"Invalid index '{idx_str}' for --insert-block")
+            try:
+                block = json.loads(block_json)
+            except json.JSONDecodeError as e:
+                raise UsageError(f"Invalid JSON for --insert-block: {e}")
+            if "id" not in block:
+                block["id"] = str(uuid.uuid4())
+            parsed_inserts.append((idx, block))
+
+        for idx, block in sorted(parsed_inserts, key=lambda x: x[0], reverse=True):
+            if idx < 0 or idx > len(new_body):
+                raise UsageError(
+                    f"Index {idx} out of range (body has {len(new_body)} blocks)"
+                )
+            new_body.insert(idx, block)
+
+        # Process appends in order
+        for block_json in append_blocks:
+            try:
+                block = json.loads(block_json)
+            except json.JSONDecodeError as e:
+                raise UsageError(f"Invalid JSON for --append-block: {e}")
+            if "id" not in block:
+                block["id"] = str(uuid.uuid4())
+            new_body.append(block)
+
+        data["body"] = new_body
+
     if publish:
         data["action"] = "publish"
 
     if not data:
-        raise UsageError("No fields to update. Use --title, --field, or --body.")
+        raise UsageError("No fields to update. Use --title, --field, --body, --append-block, or --insert-block.")
 
     result_data = ctx.client.update_page(page_id, data)
     if result_data is None:

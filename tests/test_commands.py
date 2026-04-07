@@ -586,6 +586,164 @@ def test_pages_find_json(runner):
     assert parsed["items"][0]["id"] == 15
 
 
+# -- block-level update tests --------------------------------------------------
+
+
+@respx.mock
+def test_pages_update_append_block(runner):
+    """Append a block to an existing StreamField body."""
+    page_data = {
+        "id": 42, "title": "Hello",
+        "body": [{"type": "paragraph", "value": "<p>old</p>", "id": "aaa"}],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    updated = {**page_data, "body": page_data["body"] + [{"type": "image", "value": 7, "id": "bbb"}]}
+    route = respx.patch(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=updated))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--append-block", '{"type":"image","value":7}',
+        ])
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert len(request_body["body"]) == 2
+    assert request_body["body"][0]["id"] == "aaa"
+    assert request_body["body"][1]["type"] == "image"
+    assert "id" in request_body["body"][1]  # UUID generated
+
+
+@respx.mock
+def test_pages_update_insert_block(runner):
+    """Insert a block at a specific index."""
+    page_data = {
+        "id": 42, "title": "Hello",
+        "body": [
+            {"type": "heading", "value": {"text": "Title", "size": "h1"}, "id": "aaa"},
+            {"type": "paragraph", "value": "<p>text</p>", "id": "bbb"},
+        ],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    route = respx.patch(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--insert-block", "1", '{"type":"image","value":5}',
+        ])
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert len(request_body["body"]) == 3
+    assert request_body["body"][0]["id"] == "aaa"
+    assert request_body["body"][1]["type"] == "image"
+    assert request_body["body"][2]["id"] == "bbb"
+
+
+@respx.mock
+def test_pages_update_append_multiple_blocks(runner):
+    """Multiple --append-block flags append in order."""
+    page_data = {
+        "id": 42, "title": "Hello", "body": [],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    route = respx.patch(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--append-block", '{"type":"heading","value":{"text":"Hi","size":"h1"}}',
+            "--append-block", '{"type":"paragraph","value":"<p>body</p>"}',
+        ])
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert len(request_body["body"]) == 2
+    assert request_body["body"][0]["type"] == "heading"
+    assert request_body["body"][1]["type"] == "paragraph"
+
+
+def test_pages_update_block_ops_with_body_error(runner):
+    """Cannot use --append-block together with --body."""
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--body", "hello",
+            "--append-block", '{"type":"paragraph","value":"<p>x</p>"}',
+        ])
+    assert result.exit_code != 0
+    assert "Cannot use" in result.output
+
+
+@respx.mock
+def test_pages_update_append_block_non_streamfield_error(runner):
+    """Error when body is not a StreamField (list)."""
+    page_data = {
+        "id": 42, "title": "Hello", "body": "<p>richtext</p>",
+        "meta": {"type": "home.SimplePage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--append-block", '{"type":"paragraph","value":"<p>x</p>"}',
+        ])
+    assert result.exit_code != 0
+    assert "not a StreamField" in result.output
+
+
+@respx.mock
+def test_pages_update_insert_block_out_of_range(runner):
+    """Error when insert index is out of range."""
+    page_data = {
+        "id": 42, "title": "Hello",
+        "body": [{"type": "paragraph", "value": "<p>only</p>", "id": "aaa"}],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--insert-block", "5", '{"type":"paragraph","value":"<p>x</p>"}',
+        ])
+    assert result.exit_code != 0
+    assert "out of range" in result.output
+
+
+@respx.mock
+def test_pages_update_append_block_invalid_json(runner):
+    """Error on invalid JSON in --append-block."""
+    page_data = {
+        "id": 42, "title": "Hello", "body": [],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--append-block", "not json",
+        ])
+    assert result.exit_code != 0
+    assert "Invalid JSON" in result.output
+
+
+@respx.mock
+def test_pages_update_append_preserves_existing_id(runner):
+    """Block with an existing id keeps it (no override)."""
+    page_data = {
+        "id": 42, "title": "Hello", "body": [],
+        "meta": {"type": "blog.BlogPage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    route = respx.patch(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, [
+            "pages", "update", "42",
+            "--append-block", '{"type":"image","value":3,"id":"keep-me"}',
+        ])
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert request_body["body"][0]["id"] == "keep-me"
+
+
 # -- images upload tests -------------------------------------------------------
 
 

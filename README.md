@@ -304,6 +304,30 @@ wagapi pages update 42 --title "New Title" --publish
 
 Same field options as `create` (minus `--parent` and type). Only specified fields are sent (PATCH semantics).
 
+**Block-level StreamField editing:**
+
+Instead of replacing the entire body, you can append or insert individual blocks. The CLI fetches the current body, splices in the new block(s), and sends the result.
+
+```bash
+# Append a block to the end of the body
+wagapi pages update 42 --append-block '{"type":"image","value":7}'
+
+# Insert at a specific position (0-indexed)
+wagapi pages update 42 --insert-block 1 '{"type":"paragraph","value":"<p>New paragraph</p>"}'
+
+# Multiple operations in one call
+wagapi pages update 42 \
+  --insert-block 0 '{"type":"heading","value":{"text":"Preface","size":"h1"}}' \
+  --append-block '{"type":"paragraph","value":"<p>Epilogue</p>"}'
+```
+
+| Option | Description |
+|---|---|
+| `--append-block JSON` | Append a block to the end of body (repeatable) |
+| `--insert-block INDEX JSON` | Insert a block at INDEX in body (repeatable) |
+
+A UUID `id` is auto-generated for each block unless one is provided. Cannot be combined with `--body`.
+
 ### `wagapi pages delete`
 
 ```bash
@@ -374,13 +398,16 @@ Key commands:
   wagapi pages list [--type T] [--slug S] [--path P]  — list/find pages
   wagapi pages get <id>                  — read page detail (latest draft)
   wagapi pages create <type> --parent ID_OR_PATH --title T [--field K:V]... [--body MD] [--publish]
-  wagapi pages update <id> [--field K:V]... [--publish]
+  wagapi pages update <id> [--field K:V]... [--append-block JSON]... [--insert-block IDX JSON]... [--publish]
   wagapi pages delete <id> --yes
   wagapi pages publish <id>
   wagapi images list
 
 The --parent flag accepts a page ID or a URL path (e.g. --parent /blog/).
 Body text accepts markdown by default. Use --raw for full StreamField JSON control.
+To add a block (e.g. an image) to an existing page without replacing the whole body:
+  wagapi pages update <id> --append-block '{"type":"image","value":<image_id>}'
+  wagapi pages update <id> --insert-block <position> '{"type":"image","value":<image_id>}'
 Pages are created as drafts unless --publish is passed.
 Output is JSON when piped.
 ```
@@ -428,7 +455,7 @@ wagapi
 │   ├── list                      List pages (with filters)
 │   ├── get <id>                  Get page detail
 │   ├── create <type>             Create a page
-│   ├── update <id>               Update a page
+│   ├── update <id>               Update a page (supports --append-block, --insert-block)
 │   ├── delete <id>               Delete a page
 │   ├── publish <id>              Publish latest revision
 │   └── unpublish <id>            Revert to draft
