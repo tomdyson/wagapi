@@ -51,6 +51,23 @@ SAMPLE_PAGE_TYPE_SCHEMA = {
     },
 }
 
+SAMPLE_RICHTEXT_PAGE_TYPE_SCHEMA = {
+    "name": "home.SimplePage",
+    "verbose_name": "simple page",
+    "create_schema": {
+        "required": ["type", "parent", "title"],
+        "properties": {
+            "type": {"type": "string"},
+            "parent": {"type": "integer"},
+            "title": {"type": "string"},
+            "body": {"type": "string", "description": "RichTextField body content"},
+        },
+    },
+    "allowed_parents": ["wagtailcore.Page"],
+    "allowed_children": [],
+    "streamfield_blocks": {},
+}
+
 SAMPLE_PAGE = {
     "id": 42,
     "title": "Hello",

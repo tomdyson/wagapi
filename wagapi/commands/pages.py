@@ -7,7 +7,7 @@ import click
 
 from wagapi.cli import Context, handle_api_errors, pass_ctx
 from wagapi.exceptions import UsageError
-from wagapi.formatting.markdown import markdown_to_streamfield
+from wagapi.formatting.markdown import markdown_to_richtext, markdown_to_streamfield
 from wagapi.formatting.output import (
     format_page_created,
     format_page_deleted,
@@ -25,6 +25,15 @@ def _require_client(ctx: Context):
         raise UsageError(
             "Not configured. Run 'wagapi init' or set WAGAPI_URL and WAGAPI_TOKEN."
         )
+
+
+def _is_streamfield(ctx: Context, page_type: str, field_name: str) -> bool:
+    """Check if a field is a StreamField by looking for it in streamfield_blocks."""
+    try:
+        schema = ctx.client.get_page_type_schema(page_type)
+        return field_name in schema.get("streamfield_blocks", {})
+    except Exception:
+        return True  # default to StreamField if schema lookup fails
 
 
 def _parse_parent(value: str) -> int | str:
@@ -175,7 +184,11 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
             except json.JSONDecodeError:
                 data["body"] = body
         else:
-            data["body"] = markdown_to_streamfield(body)
+            # Check if body is a StreamField or RichTextField
+            if _is_streamfield(ctx, page_type, "body"):
+                data["body"] = markdown_to_streamfield(body)
+            else:
+                data["body"] = markdown_to_richtext(body)
 
     if publish:
         data["action"] = "publish"
@@ -225,7 +238,13 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw):
             except json.JSONDecodeError:
                 data["body"] = body
         else:
-            data["body"] = markdown_to_streamfield(body)
+            # Fetch page to determine its type, then check schema
+            page_data = ctx.client.get_page(page_id)
+            page_type = page_data.get("meta", {}).get("type", "")
+            if _is_streamfield(ctx, page_type, "body"):
+                data["body"] = markdown_to_streamfield(body)
+            else:
+                data["body"] = markdown_to_richtext(body)
 
     if publish:
         data["action"] = "publish"

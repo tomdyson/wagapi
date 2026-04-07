@@ -225,8 +225,8 @@ wagapi pages list [OPTIONS]
 | Option | Description |
 |---|---|
 | `--type TYPE` | Filter by page type, e.g. `testapp.BlogPage` |
-| `--parent ID` | Direct children of page ID |
-| `--descendant-of ID` | All descendants of page ID |
+| `--parent ID_OR_PATH` | Direct children of page ID or URL path (e.g. `5` or `/blog/`) |
+| `--descendant-of ID_OR_PATH` | All descendants of page ID or URL path |
 | `--status STATUS` | `draft`, `live`, or `live+draft` |
 | `--slug SLUG` | Exact slug match |
 | `--path PATH` | Exact URL path match, e.g. `/blog/my-post/` |
@@ -258,7 +258,9 @@ wagapi pages create <type> --parent ID_OR_PATH --title TITLE [OPTIONS]
 | `--publish` | Publish immediately (default: create as draft) |
 | `--raw` | Treat field values as raw JSON (no auto-wrapping) |
 
-**Markdown body (auto-converted to StreamField):**
+**Markdown body (auto-detected: StreamField blocks or RichTextField HTML):**
+
+`--body` checks the page type schema to determine the field type. For StreamField fields, markdown is converted to blocks. For RichTextField fields, markdown is sent as-is for server-side conversion to HTML.
 
 ```bash
 wagapi pages create testapp.BlogPage --parent /blog/ \

@@ -158,7 +158,12 @@ def test_pages_create(runner):
 
 
 @respx.mock
-def test_pages_create_with_body(runner):
+def test_pages_create_with_body_streamfield(runner):
+    """Body is converted to StreamField blocks when the field is a StreamField."""
+    schema = {"streamfield_blocks": {"body": [{"type": "heading"}, {"type": "paragraph"}]}}
+    respx.get(f"{BASE_URL}/schema/blog.BlogPage/").mock(
+        return_value=Response(200, json=schema)
+    )
     data = {
         "id": 43,
         "title": "Iris",
@@ -179,11 +184,43 @@ def test_pages_create_with_body(runner):
             ],
         )
     assert result.exit_code == 0
-    # Verify the request body contained streamfield blocks
     request_body = json.loads(route.calls[0].request.content)
     assert isinstance(request_body["body"], list)
     assert request_body["body"][0]["type"] == "heading"
     assert request_body["body"][1]["type"] == "paragraph"
+
+
+@respx.mock
+def test_pages_create_with_body_richtext(runner):
+    """Body is sent as richtext format dict when the field is a RichTextField."""
+    schema = {"streamfield_blocks": {}}
+    respx.get(f"{BASE_URL}/schema/home.SimplePage/").mock(
+        return_value=Response(200, json=schema)
+    )
+    data = {
+        "id": 50,
+        "title": "About",
+        "slug": "about",
+        "meta": {"type": "home.SimplePage", "live": False, "parent_id": 3},
+    }
+    route = respx.post(f"{BASE_URL}/pages/").mock(
+        return_value=Response(201, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            [
+                "pages", "create", "home.SimplePage",
+                "--parent", "3",
+                "--title", "About",
+                "--body", "Hello **world**",
+            ],
+        )
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert isinstance(request_body["body"], dict)
+    assert request_body["body"]["format"] == "markdown"
+    assert request_body["body"]["content"] == "Hello **world**"
 
 
 @respx.mock
@@ -243,6 +280,33 @@ def test_pages_update(runner):
         result = runner.invoke(cli, ["pages", "update", "42", "--title", "Updated"])
     assert result.exit_code == 0
     assert "Updated" in result.output
+
+
+@respx.mock
+def test_pages_update_with_body_richtext(runner):
+    """Update fetches the page type and sends richtext for RichTextField."""
+    # Mock GET to fetch the page (to learn its type)
+    page_data = {
+        "id": 42, "title": "Old", "body": "<p>old</p>",
+        "meta": {"type": "home.SimplePage", "live": True},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=page_data))
+    # Mock schema lookup
+    schema = {"streamfield_blocks": {}}
+    respx.get(f"{BASE_URL}/schema/home.SimplePage/").mock(
+        return_value=Response(200, json=schema)
+    )
+    # Mock PATCH
+    updated = {**page_data, "body": "<p>new</p>"}
+    route = respx.patch(f"{BASE_URL}/pages/42/").mock(
+        return_value=Response(200, json=updated)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["pages", "update", "42", "--body", "new content"])
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert isinstance(request_body["body"], dict)
+    assert request_body["body"]["format"] == "markdown"
 
 
 @respx.mock
