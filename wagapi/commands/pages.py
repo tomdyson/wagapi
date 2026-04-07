@@ -91,13 +91,18 @@ def _parse_parent(value: str) -> int | str:
 def _parse_fields(
     fields: tuple[str, ...], raw: bool
 ) -> dict:
-    """Parse --field KEY:VALUE pairs into a dict."""
+    """Parse --field KEY:VALUE pairs into a dict.
+
+    Values that look like JSON arrays or objects are auto-detected and
+    parsed regardless of the ``raw`` flag.  When ``raw`` is True, *all*
+    values are attempted as JSON (including bare numbers and strings).
+    """
     result = {}
     for field in fields:
         if ":" not in field:
             raise UsageError(f"Invalid field format '{field}'. Expected KEY:VALUE")
         key, value = field.split(":", 1)
-        if raw:
+        if raw or (value and value[0] in ("{", "[")):
             try:
                 value = json.loads(value)
             except json.JSONDecodeError:

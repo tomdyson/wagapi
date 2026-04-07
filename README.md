@@ -253,7 +253,7 @@ wagapi pages create <type> --parent ID_OR_PATH --title TITLE [OPTIONS]
 | `--parent ID_OR_PATH` | **Required.** Parent page ID or URL path (e.g. `/blog/`) |
 | `--title TITLE` | **Required.** Page title |
 | `--slug SLUG` | URL slug (auto-generated from title if omitted) |
-| `--field KEY:VALUE` | Set a field value (repeatable) |
+| `--field KEY:VALUE` | Set a field value (repeatable). Values starting with `[` or `{` are auto-parsed as JSON |
 | `--body TEXT` | Body content as markdown. Use `-` for stdin |
 | `--publish` | Publish immediately (default: create as draft) |
 | `--raw` | Treat field values as raw JSON (no auto-wrapping) |
@@ -279,6 +279,16 @@ She argued that moral progress comes from **attention**."
 ```bash
 wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" --field published_date:2026-04-06
+```
+
+**JSON field values (auto-detected):**
+
+```bash
+# Arrays and objects are auto-parsed — no --raw needed
+wagapi pages create testapp.BlogPage --parent /blog/ \
+  --title "Iris Murdoch" \
+  --field 'authors:[{"name": "Jo", "role": "Writer"}]' \
+  --field published_date:2026-04-06
 ```
 
 **Raw mode for full StreamField control:**
@@ -361,6 +371,8 @@ When `--raw` is **not** set and a field is a StreamField, the CLI auto-converts 
 | `## Heading` | heading with `"size": "h2"` |
 | `### Heading` | heading with `"size": "h3"` |
 | Paragraph text | `{"type": "paragraph", "value": "<p>...</p>"}` |
+| `- item` (bullet list) | `{"type": "paragraph", "value": "<ul><li>...</li></ul>"}` |
+| `1. item` (ordered list) | `{"type": "paragraph", "value": "<ol><li>...</li></ol>"}` |
 | `![alt](wagapi:image/42)` | `{"type": "image", "value": 42}` |
 
 Each block gets a generated UUID v4 `id`.

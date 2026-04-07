@@ -415,6 +415,35 @@ def test_create_with_field_option(runner):
     assert request_body["published_date"] == "2026-04-06"
 
 
+@respx.mock
+def test_create_with_field_json_auto_detect(runner):
+    """JSON arrays/objects in --field values are auto-parsed without --raw."""
+    data = {
+        "id": 47, "title": "Test", "slug": "test",
+        "meta": {"type": "blog.BlogPage", "live": False, "parent_id": 3},
+    }
+    route = respx.post(f"{BASE_URL}/pages/").mock(
+        return_value=Response(201, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            [
+                "pages", "create", "blog.BlogPage",
+                "--parent", "3",
+                "--title", "Test",
+                "--field", 'authors:[{"name": "Jo", "role": "Writer"}]',
+                "--field", "published_date:2026-04-06",
+            ],
+        )
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    # JSON array auto-detected and parsed
+    assert request_body["authors"] == [{"name": "Jo", "role": "Writer"}]
+    # Plain string left as-is
+    assert request_body["published_date"] == "2026-04-06"
+
+
 # -- Block type remapping tests ------------------------------------------------
 
 
