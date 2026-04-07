@@ -196,3 +196,31 @@ class WagtailClient:
             raise WagapiError(f"Upload failed ({resp.status_code}): {resp.text}")
 
         return resp.json()
+
+    # -- snippets ------------------------------------------------------------
+
+    def list_snippet_types(self) -> list[dict]:
+        data = self._request("GET", "/schema/snippets/")
+        if isinstance(data, list):
+            return data
+        return data.get("snippet_types", [])
+
+    def get_snippet_type_schema(self, snippet_type: str) -> dict:
+        return self._request("GET", f"/schema/snippets/{snippet_type}/")
+
+    def list_snippets(self, type: str, **filters: Any) -> dict:
+        params = {"type": type}
+        params.update({k: v for k, v in filters.items() if v is not None})
+        return self._request("GET", "/snippets/", params=params)
+
+    def get_snippet(self, type: str, snippet_id: int) -> dict:
+        return self._request("GET", f"/snippets/{snippet_id}/", params={"type": type})
+
+    def create_snippet(self, data: dict) -> dict:
+        return self._request("POST", "/snippets/", json=data)
+
+    def update_snippet(self, type: str, snippet_id: int, data: dict) -> dict:
+        return self._request("PATCH", f"/snippets/{snippet_id}/", params={"type": type}, json=data)
+
+    def delete_snippet(self, type: str, snippet_id: int) -> None:
+        self._request("DELETE", f"/snippets/{snippet_id}/", params={"type": type})

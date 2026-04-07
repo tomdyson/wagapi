@@ -292,3 +292,50 @@ def format_image_uploaded(data: dict) -> str:
     if data.get("meta", {}).get("download_url"):
         lines.append(f'  URL: {data["meta"]["download_url"]}')
     return "\n".join(lines)
+
+
+# -- Snippet formatters ------------------------------------------------------
+
+
+def format_snippet_list(data: dict) -> str:
+    items = data.get("items", [])
+    if not items:
+        return "No snippets found."
+    lines = []
+    for s in items:
+        meta = s.get("meta", {})
+        name = s.get("name", s.get("title", str(s.get("id", "?"))))
+        lines.append(f'  {s["id"]:>5}  {name:<30}  {meta.get("type", "")}')
+    total = data.get("meta", {}).get("total_count", len(items))
+    header = f"Snippets ({total} total):\n"
+    return header + "\n".join(lines)
+
+
+def format_snippet_detail(data: dict) -> str:
+    meta = data.get("meta", {})
+    skip = {"id", "meta"}
+    name = data.get("name", data.get("title", "Snippet"))
+    lines = [f"{name} (ID: {data['id']})"]
+    if meta.get("type"):
+        lines.append(f'  Type: {meta["type"]}')
+    for key, value in data.items():
+        if key in skip or value is None:
+            continue
+        lines.append(f"  {key}: {value}")
+    return "\n".join(lines)
+
+
+def format_snippet_created(data: dict) -> str:
+    meta = data.get("meta", {})
+    name = data.get("name", data.get("title", ""))
+    return f'\u2713 Created snippet {data["id"]} "{name}" ({meta.get("type", "unknown")})'
+
+
+def format_snippet_updated(data: dict) -> str:
+    meta = data.get("meta", {})
+    name = data.get("name", data.get("title", ""))
+    return f'\u2713 Updated snippet {data["id"]} "{name}" ({meta.get("type", "unknown")})'
+
+
+def format_snippet_deleted(data: dict) -> str:
+    return f'\u2713 Deleted snippet {data["id"]} ({data.get("type", "unknown")})'

@@ -90,8 +90,10 @@ from wagapi.commands.init import init  # noqa: E402
 from wagapi.commands.schema import schema  # noqa: E402
 from wagapi.commands.pages import pages  # noqa: E402
 from wagapi.commands.images import images  # noqa: E402
+from wagapi.commands.snippets import snippets  # noqa: E402
 
 cli.add_command(init)
 cli.add_command(schema)
 cli.add_command(pages)
 cli.add_command(images)
+cli.add_command(snippets)

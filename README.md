@@ -207,11 +207,14 @@ If `--url` and `--token` are both provided, skips interactive prompts.
 
 ### `wagapi schema`
 
-List all available page types, or show the full field schema for a specific type:
+List available page types, or show the full field schema for a specific type:
 
 ```bash
-wagapi schema                      # list all types
+wagapi schema                      # list page types (default)
+wagapi schema --snippets           # list snippet types only
+wagapi schema --all                # list both page and snippet types
 wagapi schema testapp.BlogPage     # show fields, parents, children
+wagapi schema --snippets testapp.Category  # show snippet schema
 ```
 
 JSON output returns the raw schema from the API verbatim, including `create_schema`, `patch_schema`, and `read_schema`.
@@ -361,6 +364,18 @@ wagapi images list [--search QUERY] [--limit N] [--offset N]
 wagapi images get 7
 ```
 
+### `wagapi snippets`
+
+```bash
+wagapi snippets list <type> [--search QUERY] [--limit N] [--offset N]
+wagapi snippets get <type> <id>
+wagapi snippets create <type> --field name:VALUE [--field slug:VALUE] ...
+wagapi snippets update <type> <id> --field name:VALUE ...
+wagapi snippets delete <type> <id> [--yes]
+```
+
+The `<type>` argument is always required (e.g. `testapp.Category`) because each snippet model lives in its own database table.
+
 ## Markdown-to-StreamField conversion
 
 When `--raw` is **not** set and a field is a StreamField, the CLI auto-converts markdown into blocks:
@@ -413,6 +428,9 @@ Key commands:
   wagapi pages update <id> [--field K:V]... [--append-block JSON]... [--insert-block IDX JSON]... [--publish]
   wagapi pages delete <id> --yes
   wagapi pages publish <id>
+  wagapi snippets list <type>             — list snippets of a type
+  wagapi snippets get <type> <id>        — get snippet detail
+  wagapi snippets create <type> [--field K:V]...  — create a snippet
   wagapi images list
 
 The --parent flag accepts a page ID or a URL path (e.g. --parent /blog/).
@@ -471,6 +489,12 @@ wagapi
 │   ├── delete <id>               Delete a page
 │   ├── publish <id>              Publish latest revision
 │   └── unpublish <id>            Revert to draft
+├── snippets
+│   ├── list <type>               List snippets of a type
+│   ├── get <type> <id>           Get snippet detail
+│   ├── create <type>             Create a snippet
+│   ├── update <type> <id>        Update a snippet
+│   └── delete <type> <id>        Delete a snippet
 └── images
     ├── list                      List images
     └── get <id>                  Get image detail
