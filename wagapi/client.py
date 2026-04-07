@@ -152,3 +152,47 @@ class WagtailClient:
 
     def get_image(self, image_id: int) -> dict:
         return self._request("GET", f"/images/{image_id}/")
+
+    def upload_image(self, file_path: str, title: str) -> dict:
+        """Upload an image via multipart POST."""
+        import mimetypes
+        import os
+
+        content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+        url = f"{self.base_url}/images/"
+
+        if self.verbose:
+            print(f"> POST {url} (multipart, file={file_path})", file=sys.stderr)
+        if self.dry_run:
+            print(f"POST {url} (upload {file_path} as '{title}')", file=sys.stderr)
+            return None
+
+        try:
+            with open(file_path, "rb") as f:
+                resp = self._http.post(
+                    "/images/",
+                    data={"title": title},
+                    files={"file": (os.path.basename(file_path), f, content_type)},
+                )
+        except httpx.ConnectError as exc:
+            raise NetworkError(f"Could not connect to {self.base_url}: {exc}") from exc
+        except httpx.TimeoutException as exc:
+            raise NetworkError(f"Request timed out: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise NetworkError(str(exc)) from exc
+
+        if self.verbose:
+            print(f"< {resp.status_code} {resp.reason_phrase}", file=sys.stderr)
+
+        if resp.status_code == 401:
+            raise AuthError("Invalid or missing API token")
+        if resp.status_code == 403:
+            raise PermissionDeniedError(resp.json().get("detail", "Permission denied"))
+        if resp.status_code in (400, 422):
+            body = resp.json()
+            msg = body.get("detail", body.get("message", str(body)))
+            raise ValidationError(str(msg), details=body)
+        if resp.status_code >= 400:
+            raise WagapiError(f"Upload failed ({resp.status_code}): {resp.text}")
+
+        return resp.json()

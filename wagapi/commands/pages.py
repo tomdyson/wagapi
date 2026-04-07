@@ -6,12 +6,13 @@ import sys
 import click
 
 from wagapi.cli import Context, handle_api_errors, pass_ctx
-from wagapi.exceptions import UsageError
+from wagapi.exceptions import NotFoundError, UsageError
 from wagapi.formatting.markdown import markdown_to_richtext, markdown_to_streamfield
 from wagapi.formatting.output import (
     format_page_created,
     format_page_deleted,
     format_page_detail,
+    format_page_find,
     format_page_list,
     format_page_published,
     format_page_unpublished,
@@ -27,13 +28,55 @@ def _require_client(ctx: Context):
         )
 
 
-def _is_streamfield(ctx: Context, page_type: str, field_name: str) -> bool:
-    """Check if a field is a StreamField by looking for it in streamfield_blocks."""
+def _get_streamfield_info(ctx: Context, page_type: str, field_name: str) -> tuple[bool, list[str]]:
+    """Check if a field is a StreamField and return (is_streamfield, allowed_block_types)."""
     try:
         schema = ctx.client.get_page_type_schema(page_type)
-        return field_name in schema.get("streamfield_blocks", {})
+        sf_blocks = schema.get("streamfield_blocks", {})
+        if field_name in sf_blocks:
+            blocks = sf_blocks[field_name]
+            if isinstance(blocks, list):
+                types = [b.get("type", b.get("name", "")) for b in blocks]
+            elif isinstance(blocks, dict):
+                types = list(blocks.keys())
+            else:
+                types = []
+            return True, types
+        return False, []
     except Exception:
-        return True  # default to StreamField if schema lookup fails
+        return True, []  # default to StreamField if schema lookup fails
+
+
+_BLOCK_REMAPS = {
+    "paragraph": ["text", "rich_text", "richtext"],
+    "heading": ["title", "header"],
+}
+
+
+def _remap_blocks(blocks: list[dict], allowed_types: list[str]) -> list[dict]:
+    """Remap block types to match the schema's allowed types."""
+    if not allowed_types:
+        return blocks  # no schema info, pass through
+    allowed = set(allowed_types)
+    result = []
+    for block in blocks:
+        btype = block.get("type", "")
+        if btype in allowed:
+            result.append(block)
+        elif btype in _BLOCK_REMAPS:
+            remapped = None
+            for alt in _BLOCK_REMAPS[btype]:
+                if alt in allowed:
+                    remapped = alt
+                    break
+            if remapped:
+                result.append({**block, "type": remapped})
+            else:
+                click.echo(f"Warning: no remap for block type '{btype}' (allowed: {', '.join(sorted(allowed))})", err=True)
+                result.append(block)
+        else:
+            result.append(block)
+    return result
 
 
 def _parse_parent(value: str) -> int | str:
@@ -129,13 +172,42 @@ def list_pages(
 
 
 @pages.command()
-@click.argument("page_id", type=int)
+@click.argument("query")
+@click.option("--type", "page_type", default=None, help="Filter by page type")
+@pass_ctx
+@handle_api_errors
+def find(ctx: Context, query: str, page_type: str | None):
+    """Search for pages by title or content."""
+    _require_client(ctx)
+    params = {"search": query}
+    if page_type:
+        params["type"] = page_type
+    data = ctx.client.list_pages(**params)
+    result = output(
+        data,
+        format_page_find,
+        force_json=ctx.force_json,
+        force_human=ctx.force_human,
+    )
+    click.echo(result)
+
+
+@pages.command()
+@click.argument("page_id")
 @click.option("--version", default=None, help="Version to retrieve (e.g. 'live')")
 @pass_ctx
 @handle_api_errors
-def get(ctx: Context, page_id: int, version: str | None):
-    """Get page detail."""
+def get(ctx: Context, page_id: str, version: str | None):
+    """Get page detail by ID or URL path."""
     _require_client(ctx)
+    if page_id.startswith("/"):
+        results = ctx.client.list_pages(path=page_id)
+        items = results.get("items", results.get("results", []))
+        if not items:
+            raise NotFoundError(f"No page found at path: {page_id}")
+        page_id = items[0]["id"]
+    else:
+        page_id = int(page_id)
     data = ctx.client.get_page(page_id, version=version)
     result = output(
         data,
@@ -184,9 +256,9 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
             except json.JSONDecodeError:
                 data["body"] = body
         else:
-            # Check if body is a StreamField or RichTextField
-            if _is_streamfield(ctx, page_type, "body"):
-                data["body"] = markdown_to_streamfield(body)
+            is_sf, allowed_types = _get_streamfield_info(ctx, page_type, "body")
+            if is_sf:
+                data["body"] = _remap_blocks(markdown_to_streamfield(body), allowed_types)
             else:
                 data["body"] = markdown_to_richtext(body)
 
@@ -241,8 +313,9 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw):
             # Fetch page to determine its type, then check schema
             page_data = ctx.client.get_page(page_id)
             page_type = page_data.get("meta", {}).get("type", "")
-            if _is_streamfield(ctx, page_type, "body"):
-                data["body"] = markdown_to_streamfield(body)
+            is_sf, allowed_types = _get_streamfield_info(ctx, page_type, "body")
+            if is_sf:
+                data["body"] = _remap_blocks(markdown_to_streamfield(body), allowed_types)
             else:
                 data["body"] = markdown_to_richtext(body)
 

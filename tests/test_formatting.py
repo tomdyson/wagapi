@@ -3,6 +3,7 @@
 from wagapi.formatting.output import (
     _richtext_preview,
     _streamfield_preview,
+    format_image_list,
     format_page_detail,
     format_page_list,
     format_schema_detail,
@@ -171,3 +172,72 @@ class TestFormatSchemaDetail:
         assert "RichText" not in result
         assert "StreamField" not in result
         assert "string" in result
+
+
+class TestFormatPageDetailEmptyFields:
+    def test_empty_list_shown(self):
+        data = {
+            "id": 21, "title": "Ev", "slug": "ev",
+            "meta": {"type": "events.EventPage", "live": True},
+            "body": [],
+        }
+        result = format_page_detail(data)
+        assert "body: (empty)" in result
+
+    def test_empty_string_not_hidden(self):
+        data = {
+            "id": 4, "title": "About", "slug": "about",
+            "meta": {"type": "home.SimplePage", "live": True},
+            "intro": "",
+        }
+        result = format_page_detail(data)
+        # empty string should not cause an error or be silently dropped
+        assert "About" in result
+
+
+class TestFormatSchemaFootnote:
+    def test_required_fields_have_footnote(self):
+        data = {
+            "type": "blog.BlogPage",
+            "create_schema": {
+                "required": ["title", "body"],
+                "properties": {
+                    "title": {"type": "string", "title": "Title"},
+                    "body": {"type": "array", "title": "Body"},
+                },
+            },
+            "streamfield_blocks": {"body": [{"type": "paragraph"}]},
+        }
+        result = format_schema_detail(data)
+        assert "enforced on publish" in result
+
+    def test_no_required_fields_no_footnote(self):
+        data = {
+            "type": "blog.BlogPage",
+            "create_schema": {
+                "required": [],
+                "properties": {
+                    "slug": {"type": "string", "title": "Slug"},
+                },
+            },
+            "streamfield_blocks": {},
+        }
+        result = format_schema_detail(data)
+        assert "enforced on publish" not in result
+
+
+class TestFormatImageList:
+    def test_shows_dimensions(self):
+        data = {
+            "items": [{"id": 7, "title": "Hero", "width": 1200, "height": 800}],
+        }
+        result = format_image_list(data)
+        assert "1200\u00d7800" in result
+        assert "Hero" in result
+
+    def test_no_dimensions(self):
+        data = {
+            "items": [{"id": 7, "title": "Hero"}],
+        }
+        result = format_image_list(data)
+        assert "Hero" in result

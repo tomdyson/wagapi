@@ -126,8 +126,8 @@ def format_page_detail(data: dict) -> str:
         elif isinstance(value, list) and value:
             lines.append(f"  {key}: {len(value)} items")
         elif isinstance(value, list):
-            pass  # skip empty lists
-        elif isinstance(value, str) and value.startswith("<"):
+            lines.append(f"  {key}: (empty)")
+        elif isinstance(value, str) and value and value.startswith("<"):
             # RichTextField HTML — show preview
             lines.append(f"  {key}: {_richtext_preview(value)}")
         else:
@@ -153,6 +153,18 @@ def format_page_list(data: dict) -> str:
     total = data.get("meta", {}).get("total_count", len(items))
     header = f"Pages ({total} total):\n"
     return header + "\n".join(lines)
+
+
+def format_page_find(data: dict) -> str:
+    items = data.get("items", data.get("results", []))
+    if not items:
+        return "No pages found."
+    lines = []
+    for page in items:
+        meta = page.get("meta", {})
+        path = meta.get("url_path", "")
+        lines.append(f'  {page["id"]:>5}  {page.get("title", "Untitled"):<40}  {path}')
+    return "\n".join(lines)
 
 
 def format_schema_list(data: list[dict]) -> str:
@@ -222,6 +234,10 @@ def format_schema_detail(data: dict) -> str:
             lines.extend(opt_lines)
             lines.append("")
 
+        if req_lines:
+            lines.append("  Note: required fields are enforced on publish, not draft creation.")
+            lines.append("")
+
     if data.get("allowed_parent_types", data.get("allowed_parents")):
         parents = data.get("allowed_parent_types", data.get("allowed_parents", []))
         lines.append(f'  Allowed parents: {", ".join(parents)}')
@@ -251,7 +267,10 @@ def format_image_list(data: dict) -> str:
         return "No images found."
     lines = ["Images:"]
     for img in items:
-        lines.append(f'  {img["id"]:>5}  {img.get("title", "Untitled")}')
+        title = img.get("title", "Untitled")
+        w, h = img.get("width"), img.get("height")
+        dims = f"{w}\u00d7{h}" if w and h else ""
+        lines.append(f'  {img["id"]:>5}  {title:<30}  {dims}')
     return "\n".join(lines)
 
 
@@ -259,6 +278,15 @@ def format_image_detail(data: dict) -> str:
     lines = [
         f'{data.get("title", "Untitled")} (ID: {data["id"]})',
     ]
+    if data.get("width") and data.get("height"):
+        lines.append(f"  Dimensions: {data['width']}x{data['height']}")
+    if data.get("meta", {}).get("download_url"):
+        lines.append(f'  URL: {data["meta"]["download_url"]}')
+    return "\n".join(lines)
+
+
+def format_image_uploaded(data: dict) -> str:
+    lines = [f'✓ Uploaded image {data["id"]} "{data.get("title", "")}"']
     if data.get("width") and data.get("height"):
         lines.append(f"  Dimensions: {data['width']}x{data['height']}")
     if data.get("meta", {}).get("download_url"):

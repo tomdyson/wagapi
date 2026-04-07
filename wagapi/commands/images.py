@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import click
 
 from wagapi.cli import Context, handle_api_errors, pass_ctx
@@ -7,6 +9,7 @@ from wagapi.exceptions import UsageError
 from wagapi.formatting.output import (
     format_image_detail,
     format_image_list,
+    format_image_uploaded,
     output,
 )
 
@@ -63,6 +66,31 @@ def get(ctx: Context, image_id: int):
     result = output(
         data,
         format_image_detail,
+        force_json=ctx.force_json,
+        force_human=ctx.force_human,
+    )
+    click.echo(result)
+
+
+@images.command()
+@click.argument("file", type=click.Path(exists=True))
+@click.option("--title", default=None, help="Image title (defaults to filename)")
+@pass_ctx
+@handle_api_errors
+def upload(ctx: Context, file: str, title: str | None):
+    """Upload an image."""
+    if not ctx.client:
+        raise UsageError(
+            "Not configured. Run 'wagapi init' or set WAGAPI_URL and WAGAPI_TOKEN."
+        )
+    if title is None:
+        title = os.path.splitext(os.path.basename(file))[0]
+    data = ctx.client.upload_image(file, title)
+    if data is None:
+        return
+    result = output(
+        data,
+        format_image_uploaded,
         force_json=ctx.force_json,
         force_human=ctx.force_human,
     )

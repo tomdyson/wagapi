@@ -413,3 +413,223 @@ def test_create_with_field_option(runner):
     assert result.exit_code == 0
     request_body = json.loads(route.calls[0].request.content)
     assert request_body["published_date"] == "2026-04-06"
+
+
+# -- Block type remapping tests ------------------------------------------------
+
+
+@respx.mock
+def test_pages_create_remap_paragraph_to_text(runner):
+    """paragraph blocks are remapped to text when schema only allows text."""
+    schema = {"streamfield_blocks": {"body": [{"type": "text"}, {"type": "map_embed"}]}}
+    respx.get(f"{BASE_URL}/schema/events.EventPage/").mock(
+        return_value=Response(200, json=schema)
+    )
+    data = {
+        "id": 50, "title": "Ev", "slug": "ev",
+        "meta": {"type": "events.EventPage", "live": False, "parent_id": 3},
+    }
+    route = respx.post(f"{BASE_URL}/pages/").mock(
+        return_value=Response(201, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            ["pages", "create", "events.EventPage",
+             "--parent", "3", "--title", "Ev",
+             "--body", "Hello world"],
+        )
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert request_body["body"][0]["type"] == "text"
+
+
+@respx.mock
+def test_pages_create_block_warning_on_unknown(runner):
+    """Warn on stderr when no remap exists for a generated block type."""
+    schema = {"streamfield_blocks": {"body": [{"type": "map_embed"}]}}
+    respx.get(f"{BASE_URL}/schema/events.EventPage/").mock(
+        return_value=Response(200, json=schema)
+    )
+    data = {
+        "id": 51, "title": "Ev", "slug": "ev",
+        "meta": {"type": "events.EventPage", "live": False, "parent_id": 3},
+    }
+    respx.post(f"{BASE_URL}/pages/").mock(
+        return_value=Response(201, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            ["pages", "create", "events.EventPage",
+             "--parent", "3", "--title", "Ev",
+             "--body", "Hello"],
+        )
+    assert result.exit_code == 0
+    assert "Warning" in result.output
+
+
+@respx.mock
+def test_pages_create_block_passthrough_no_schema(runner):
+    """Blocks pass through unchanged when schema lookup fails."""
+    respx.get(f"{BASE_URL}/schema/bad.Type/").mock(
+        return_value=Response(404, json={"detail": "Not found"})
+    )
+    data = {
+        "id": 52, "title": "X", "slug": "x",
+        "meta": {"type": "bad.Type", "live": False, "parent_id": 3},
+    }
+    route = respx.post(f"{BASE_URL}/pages/").mock(
+        return_value=Response(201, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            ["pages", "create", "bad.Type",
+             "--parent", "3", "--title", "X",
+             "--body", "Hello"],
+        )
+    assert result.exit_code == 0
+    request_body = json.loads(route.calls[0].request.content)
+    assert request_body["body"][0]["type"] == "paragraph"
+
+
+# -- pages get by path tests ---------------------------------------------------
+
+
+@respx.mock
+def test_pages_get_by_path(runner):
+    """Get page by URL path resolves via list then fetches detail."""
+    list_data = {
+        "items": [{"id": 42, "title": "Hello", "meta": {"type": "blog.BlogPage", "live": True}}],
+        "meta": {"total_count": 1},
+    }
+    respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=list_data))
+    detail_data = {
+        "id": 42, "title": "Hello", "slug": "hello",
+        "meta": {"type": "blog.BlogPage", "live": True, "url_path": "/blog/hello/"},
+    }
+    respx.get(f"{BASE_URL}/pages/42/").mock(return_value=Response(200, json=detail_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["pages", "get", "/blog/hello/"])
+    assert result.exit_code == 0
+    assert "Hello" in result.output
+
+
+@respx.mock
+def test_pages_get_by_path_not_found(runner):
+    """Get page by nonexistent path returns not-found error."""
+    list_data = {"items": [], "meta": {"total_count": 0}}
+    respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=list_data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["pages", "get", "/nonexistent/"])
+    assert result.exit_code != 0
+    assert "No page found" in result.output
+
+
+# -- pages find tests ----------------------------------------------------------
+
+
+@respx.mock
+def test_pages_find(runner):
+    """Find pages by search query."""
+    data = {
+        "meta": {"total_count": 1},
+        "items": [
+            {"id": 15, "title": "Iris Murdoch", "meta": {"type": "blog.BlogPage", "live": True, "url_path": "/blog/iris-murdoch/"}},
+        ],
+    }
+    route = respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["--human", "pages", "find", "murdoch"])
+    assert result.exit_code == 0
+    assert "Iris Murdoch" in result.output
+    assert "search" in str(route.calls[0].request.url)
+
+
+@respx.mock
+def test_pages_find_with_type(runner):
+    """Find accepts --type filter."""
+    data = {"meta": {"total_count": 0}, "items": []}
+    route = respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["--human", "pages", "find", "test", "--type", "blog.BlogPage"])
+    assert result.exit_code == 0
+    url = str(route.calls[0].request.url)
+    assert "search" in url
+    assert "type" in url
+
+
+@respx.mock
+def test_pages_find_no_results(runner):
+    """Find with no results shows message."""
+    data = {"meta": {"total_count": 0}, "items": []}
+    respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["--human", "pages", "find", "nonexistent"])
+    assert result.exit_code == 0
+    assert "No pages found" in result.output
+
+
+@respx.mock
+def test_pages_find_json(runner):
+    """Find with --json returns raw JSON."""
+    data = {
+        "meta": {"total_count": 1},
+        "items": [{"id": 15, "title": "Test", "meta": {"type": "blog.BlogPage", "live": True}}],
+    }
+    respx.get(f"{BASE_URL}/pages/").mock(return_value=Response(200, json=data))
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["--json", "pages", "find", "test"])
+    assert result.exit_code == 0
+    parsed = json.loads(result.output)
+    assert parsed["items"][0]["id"] == 15
+
+
+# -- images upload tests -------------------------------------------------------
+
+
+@respx.mock
+def test_images_upload(runner):
+    """Upload an image file."""
+    data = {"id": 10, "title": "photo", "width": 800, "height": 600, "meta": {}}
+    respx.post(f"{BASE_URL}/images/").mock(return_value=Response(201, json=data))
+    with runner.isolated_filesystem():
+        with open("photo.png", "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+        with mock.patch.dict("os.environ", ENV):
+            result = runner.invoke(cli, ["--human", "images", "upload", "photo.png"])
+    assert result.exit_code == 0
+    assert "Uploaded" in result.output
+    assert "photo" in result.output
+
+
+@respx.mock
+def test_images_upload_default_title(runner):
+    """Upload without --title uses filename stem."""
+    data = {"id": 11, "title": "my_photo", "width": 100, "height": 100, "meta": {}}
+    route = respx.post(f"{BASE_URL}/images/").mock(return_value=Response(201, json=data))
+    with runner.isolated_filesystem():
+        with open("my_photo.jpg", "wb") as f:
+            f.write(b"\xff\xd8" + b"\x00" * 50)
+        with mock.patch.dict("os.environ", ENV):
+            result = runner.invoke(cli, ["--human", "images", "upload", "my_photo.jpg"])
+    assert result.exit_code == 0
+    # Check form data includes filename-derived title
+    request = route.calls[0].request
+    assert b"my_photo" in request.content
+
+
+@respx.mock
+def test_images_upload_custom_title(runner):
+    """Upload with --title uses the provided title."""
+    data = {"id": 12, "title": "My Photo", "width": 100, "height": 100, "meta": {}}
+    route = respx.post(f"{BASE_URL}/images/").mock(return_value=Response(201, json=data))
+    with runner.isolated_filesystem():
+        with open("img.png", "wb") as f:
+            f.write(b"\x89PNG" + b"\x00" * 50)
+        with mock.patch.dict("os.environ", ENV):
+            result = runner.invoke(cli, ["--human", "images", "upload", "img.png", "--title", "My Photo"])
+    assert result.exit_code == 0
+    request = route.calls[0].request
+    assert b"My Photo" in request.content
