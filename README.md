@@ -34,10 +34,10 @@ uv tool install wagapi
 
 ### 1. Set up a Wagtail site with wagtail-write-api
 
-Follow the [example app guide](https://tomdyson.github.io/wagtail-write-api/development/example-app/) to get a local Wagtail instance running:
+Follow the [example app guide](https://tomdyson.github.io/wagtail-write-api/development/example-app/) to get a local Wagtail instance running with [wagtail-write-api](https://github.com/tomdyson/wagtail-write-api):
 
 ```bash
-cd example
+cd wagtail-write-api/example
 uv run python manage.py migrate
 uv run python manage.py seed_demo
 uv run python manage.py runserver
@@ -138,7 +138,7 @@ wagapi pages delete <ID>
 wagapi -v pages get <ID>
 
 # Preview without executing
-wagapi --dry-run pages create testapp.SimplePage --parent /home/ --title "Test"
+wagapi --dry-run pages create testapp.SimplePage --parent / --title "Test"
 ```
 
 ### 8. Pipe-friendly JSON output

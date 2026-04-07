@@ -52,7 +52,8 @@ def handle_api_errors(fn):
     return wrapper
 
 
-@click.group()
+@click.group(invoke_without_command=True)
+@click.version_option(package_name="wagapi")
 @click.option("--url", envvar="WAGAPI_URL", default=None, help="API base URL")
 @click.option("--token", envvar="WAGAPI_TOKEN", default=None, help="API token")
 @click.option("--json", "output_json", is_flag=True, help="Force JSON output")
@@ -62,6 +63,10 @@ def handle_api_errors(fn):
 @click.pass_context
 def cli(ctx: click.Context, url, token, output_json, output_human, verbose, dry_run):
     """wagapi — CLI client for the Wagtail Write API."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        return
+
     obj = Context()
     obj.force_json = output_json
     obj.force_human = output_human

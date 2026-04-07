@@ -65,6 +65,36 @@ def format_page_unpublished(data: dict) -> str:
     return f'✓ Unpublished page {data.get("id", "?")} "{data.get("title", "")}"'
 
 
+def _streamfield_preview(blocks: list[dict], max_len: int = 200) -> str:
+    """Extract a plain-text preview from StreamField blocks."""
+    import re
+
+    parts = []
+    for block in blocks:
+        btype = block.get("type", "")
+        val = block.get("value", "")
+        if btype == "heading":
+            text = val.get("text", "") if isinstance(val, dict) else str(val)
+            parts.append(text)
+        elif btype in ("paragraph", "text"):
+            text = re.sub(r"<[^>]+>", "", str(val))
+            parts.append(text)
+    preview = " / ".join(parts)
+    if len(preview) > max_len:
+        preview = preview[: max_len - 1] + "…"
+    return preview
+
+
+def _richtext_preview(html: str, max_len: int = 200) -> str:
+    """Extract a plain-text preview from HTML rich text."""
+    import re
+
+    text = re.sub(r"<[^>]+>", "", str(html)).strip()
+    if len(text) > max_len:
+        text = text[: max_len - 1] + "…"
+    return text
+
+
 def format_page_detail(data: dict) -> str:
     meta = data.get("meta", {})
     status = "live" if meta.get("live") else "draft"
@@ -73,7 +103,9 @@ def format_page_detail(data: dict) -> str:
         f'  Type: {meta.get("type", "unknown")}',
         f'  Slug: {data.get("slug", "")}',
     ]
-    if meta.get("html_url"):
+    if meta.get("url_path"):
+        lines.append(f'  Path: {meta["url_path"]}')
+    elif meta.get("html_url"):
         lines.append(f'  URL: {meta["html_url"]}')
     if meta.get("parent_id"):
         lines.append(f'  Parent: {meta["parent_id"]}')
@@ -84,13 +116,20 @@ def format_page_detail(data: dict) -> str:
         if key in skip or value is None:
             continue
         if isinstance(value, list) and value and isinstance(value[0], dict) and "type" in value[0]:
-            # StreamField — summarise block types
-            block_types = [b.get("type", "?") for b in value]
-            lines.append(f"  {key}: [{', '.join(block_types)}] ({len(value)} blocks)")
+            # StreamField — show preview
+            preview = _streamfield_preview(value)
+            if preview:
+                lines.append(f"  {key}: {preview}")
+            else:
+                block_types = [b.get("type", "?") for b in value]
+                lines.append(f"  {key}: [{', '.join(block_types)}] ({len(value)} blocks)")
         elif isinstance(value, list) and value:
             lines.append(f"  {key}: {len(value)} items")
         elif isinstance(value, list):
             pass  # skip empty lists
+        elif isinstance(value, str) and value.startswith("<"):
+            # RichTextField HTML — show preview
+            lines.append(f"  {key}: {_richtext_preview(value)}")
         else:
             lines.append(f"  {key}: {value}")
 
@@ -105,9 +144,11 @@ def format_page_list(data: dict) -> str:
     for page in items:
         meta = page.get("meta", {})
         status = "live" if meta.get("live") else "draft"
+        url_path = meta.get("url_path", "")
+        path_col = f"  {url_path}" if url_path else ""
         lines.append(
             f'  {page["id"]:>5}  {page.get("title", "Untitled"):<40}  '
-            f'{meta.get("type", ""):<30}  {status}'
+            f'{meta.get("type", ""):<30}  {status}{path_col}'
         )
     total = data.get("meta", {}).get("total_count", len(items))
     header = f"Pages ({total} total):\n"
@@ -147,6 +188,9 @@ def format_schema_detail(data: dict) -> str:
     properties = create_schema.get("properties", {})
     required_fields = set(create_schema.get("required", []))
 
+    streamfield_fields = set(data.get("streamfield_blocks", {}).keys())
+    richtext_fields = set(data.get("richtext_fields", []))
+
     if properties:
         req_lines = []
         opt_lines = []
@@ -157,6 +201,11 @@ def format_schema_detail(data: dict) -> str:
                 types = [t.get("type", t.get("format", "")) for t in field_schema["anyOf"] if t.get("type") != "null"]
                 ftype = types[0] if types else "unknown"
             ftype = ftype or "unknown"
+            # Use Wagtail-specific type names for clarity
+            if field_name in streamfield_fields:
+                ftype = "StreamField"
+            elif field_name in richtext_fields:
+                ftype = "RichText"
             desc = field_schema.get("description", field_schema.get("title", ""))
             entry = f"    {field_name:<20} {ftype:<15} {desc}"
             if field_name in required_fields:
