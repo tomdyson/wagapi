@@ -109,13 +109,13 @@ class WagtailClient:
     # -- schema --------------------------------------------------------------
 
     def list_page_types(self) -> list[dict]:
-        data = self._request("GET", "/schema/page-types/")
+        data = self._request("GET", "/schema/")
         if isinstance(data, list):
             return data
         return data.get("page_types", data.get("items", data.get("results", [data])))
 
     def get_page_type_schema(self, page_type: str) -> dict:
-        return self._request("GET", f"/schema/page-types/{page_type}/")
+        return self._request("GET", f"/schema/{page_type}/")
 
     # -- pages ---------------------------------------------------------------
 

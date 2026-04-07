@@ -35,7 +35,7 @@ def test_pages_help(runner):
 @respx.mock
 def test_schema_list(runner):
     data = [{"name": "blog.BlogPage", "verbose_name": "blog page", "fields": ["title", "body"]}]
-    respx.get(f"{BASE_URL}/schema/page-types/").mock(
+    respx.get(f"{BASE_URL}/schema/").mock(
         return_value=Response(200, json=data)
     )
     with mock.patch.dict("os.environ", ENV):
@@ -56,7 +56,7 @@ def test_schema_detail(runner):
         "allowed_parents": ["blog.BlogIndexPage"],
         "allowed_children": [],
     }
-    respx.get(f"{BASE_URL}/schema/page-types/blog.BlogPage/").mock(
+    respx.get(f"{BASE_URL}/schema/blog.BlogPage/").mock(
         return_value=Response(200, json=data)
     )
     with mock.patch.dict("os.environ", ENV):
@@ -68,7 +68,7 @@ def test_schema_detail(runner):
 @respx.mock
 def test_schema_json_output(runner):
     data = [{"name": "blog.BlogPage", "verbose_name": "blog page"}]
-    respx.get(f"{BASE_URL}/schema/page-types/").mock(
+    respx.get(f"{BASE_URL}/schema/").mock(
         return_value=Response(200, json=data)
     )
     with mock.patch.dict("os.environ", ENV):

@@ -27,7 +27,7 @@ def client():
 @respx.mock
 def test_list_page_types(client):
     data = [{"name": "blog.BlogPage", "verbose_name": "blog page"}]
-    respx.get(f"{BASE_URL}/schema/page-types/").mock(
+    respx.get(f"{BASE_URL}/schema/").mock(
         return_value=Response(200, json=data)
     )
     result = client.list_page_types()
@@ -37,7 +37,7 @@ def test_list_page_types(client):
 @respx.mock
 def test_get_page_type_schema(client):
     data = {"name": "blog.BlogPage", "create_schema": {}}
-    respx.get(f"{BASE_URL}/schema/page-types/blog.BlogPage/").mock(
+    respx.get(f"{BASE_URL}/schema/blog.BlogPage/").mock(
         return_value=Response(200, json=data)
     )
     result = client.get_page_type_schema("blog.BlogPage")
