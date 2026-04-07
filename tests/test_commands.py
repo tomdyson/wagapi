@@ -98,6 +98,28 @@ def test_pages_list(runner):
 
 
 @respx.mock
+def test_pages_list_with_parent(runner):
+    data = {
+        "meta": {"total_count": 1},
+        "items": [
+            {
+                "id": 42,
+                "title": "Hello",
+                "meta": {"type": "blog.BlogPage", "live": True},
+            }
+        ],
+    }
+    route = respx.get(f"{BASE_URL}/pages/").mock(
+        return_value=Response(200, json=data)
+    )
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["pages", "list", "--parent", "5"])
+    assert result.exit_code == 0
+    assert route.called
+    assert "parent" in str(route.calls[0].request.url)
+
+
+@respx.mock
 def test_pages_get(runner):
     data = {
         "id": 42,

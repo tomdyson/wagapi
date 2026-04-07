@@ -91,7 +91,7 @@ def list_pages(
     if page_type:
         params["type"] = page_type
     if parent:
-        params["child_of"] = parent
+        params["parent"] = parent
     if descendant_of:
         params["descendant_of"] = descendant_of
     if status:
