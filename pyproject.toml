@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wagapi"
-version = "0.2.0"
+version = "0.2.1"
 description = "CLI client for the Wagtail Write API, optimised for LLM orchestration"
 readme = "README.md"
 license = "MIT"

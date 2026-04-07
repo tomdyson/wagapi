@@ -35,7 +35,18 @@ def handle_api_errors(fn):
         except WagapiError as exc:
             click.echo(f"Error: {exc}", err=True)
             if hasattr(exc, "details") and exc.details:
-                click.echo(f"Details: {exc.details}", err=True)
+                details = exc.details
+                # Format field-level validation errors readably
+                if isinstance(details, dict) and "details" in details:
+                    for item in details["details"]:
+                        field = item.get("field", "")
+                        msg = item.get("message", str(item))
+                        if field:
+                            click.echo(f"  {field}: {msg}", err=True)
+                        else:
+                            click.echo(f"  {msg}", err=True)
+                else:
+                    click.echo(f"Details: {details}", err=True)
             sys.exit(exc.exit_code)
 
     return wrapper

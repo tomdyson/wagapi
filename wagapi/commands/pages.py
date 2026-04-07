@@ -259,7 +259,7 @@ def delete(ctx: Context, page_id: int, yes: bool):
 
     ctx.client.delete_page(page_id)
     result = output(
-        page_id,
+        {"id": page_id, "deleted": True},
         format_page_deleted,
         force_json=ctx.force_json,
         force_human=ctx.force_human,

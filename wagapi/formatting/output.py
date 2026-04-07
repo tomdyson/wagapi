@@ -53,8 +53,8 @@ def format_page_updated(data: dict) -> str:
     return f'✓ Updated page {data["id"]} "{data.get("title", "")}" ({status})'
 
 
-def format_page_deleted(page_id: int) -> str:
-    return f"✓ Deleted page {page_id}"
+def format_page_deleted(data: dict) -> str:
+    return f'✓ Deleted page {data["id"]}'
 
 
 def format_page_published(data: dict) -> str:
@@ -75,6 +75,25 @@ def format_page_detail(data: dict) -> str:
     ]
     if meta.get("html_url"):
         lines.append(f'  URL: {meta["html_url"]}')
+    if meta.get("parent_id"):
+        lines.append(f'  Parent: {meta["parent_id"]}')
+
+    # Show custom fields (skip meta, id, title, slug which are already shown)
+    skip = {"id", "title", "slug", "meta", "alias_of"}
+    for key, value in data.items():
+        if key in skip or value is None:
+            continue
+        if isinstance(value, list) and value and isinstance(value[0], dict) and "type" in value[0]:
+            # StreamField — summarise block types
+            block_types = [b.get("type", "?") for b in value]
+            lines.append(f"  {key}: [{', '.join(block_types)}] ({len(value)} blocks)")
+        elif isinstance(value, list) and value:
+            lines.append(f"  {key}: {len(value)} items")
+        elif isinstance(value, list):
+            pass  # skip empty lists
+        else:
+            lines.append(f"  {key}: {value}")
+
     return "\n".join(lines)
 
 
@@ -169,6 +188,10 @@ def format_schema_detail(data: dict) -> str:
         for field_name, blocks in data["streamfield_blocks"].items():
             block_names = [b.get("type", b.get("name", "?")) for b in blocks] if isinstance(blocks, list) else list(blocks.keys()) if isinstance(blocks, dict) else []
             lines.append(f"    {field_name}: {', '.join(block_names)}")
+
+    if data.get("example_cli"):
+        lines.append("")
+        lines.append(f"  Example:\n    {data['example_cli'].replace(chr(10), chr(10) + '    ')}")
 
     return "\n".join(lines)
 

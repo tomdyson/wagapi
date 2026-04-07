@@ -12,6 +12,49 @@ from wagapi.formatting.output import (
 )
 
 
+def _build_example_command(page_type: str, data: dict) -> str:
+    """Generate an example wagapi create command from schema data."""
+    create_schema = data.get("create_schema", {})
+    properties = create_schema.get("properties", {})
+    required = set(create_schema.get("required", []))
+    has_streamfield = bool(data.get("streamfield_blocks"))
+
+    # CLI handles type and parent itself; action is internal
+    skip = {"type", "parent", "action"}
+
+    parts = [f"wagapi pages create {page_type}", "--parent <ID_OR_PATH>"]
+
+    for field_name in properties:
+        if field_name in skip:
+            continue
+        if field_name not in required:
+            continue
+        prop = properties[field_name]
+
+        # StreamField body → use --body flag
+        if field_name == "body" and prop.get("type") == "array":
+            parts.append('--body "Your content here (markdown)"')
+            continue
+
+        # Derive a placeholder from the field type
+        ftype = prop.get("type", "")
+        if ftype == "string":
+            parts.append(f'--field {field_name}:"..."')
+        elif ftype == "integer":
+            parts.append(f"--field {field_name}:<ID>")
+        elif ftype == "array":
+            parts.append(f"--field {field_name}:[]")
+        else:
+            parts.append(f'--field {field_name}:"..."')
+
+    # title is always a CLI flag, not --field
+    parts = [p for p in parts if not p.startswith("--field title:")]
+    if "title" in required:
+        parts.insert(2, '--title "Your Title"')
+
+    return " \\\n  ".join(parts)
+
+
 @click.command()
 @click.argument("page_type", required=False, default=None)
 @pass_ctx
@@ -25,6 +68,7 @@ def schema(ctx: Context, page_type: str | None) -> None:
 
     if page_type:
         data = ctx.client.get_page_type_schema(page_type)
+        data["example_cli"] = _build_example_command(page_type, data)
         result = output(
             data,
             format_schema_detail,

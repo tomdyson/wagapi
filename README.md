@@ -91,13 +91,13 @@ wagapi schema testapp.BlogPage
 
 ```bash
 wagapi pages list
-wagapi pages get 6
+wagapi pages get 3   # use an ID from the list above
 ```
 
 ### 5. Create a page
 
 ```bash
-wagapi pages create testapp.BlogPage --parent 5 \
+wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" \
   --body "## A Philosopher and Novelist
 
@@ -112,10 +112,10 @@ The `--body` flag accepts markdown, which is auto-converted to StreamField block
 
 ```bash
 # Publish a draft (use the page ID returned by create)
-wagapi pages publish 15
+wagapi pages publish <ID>
 
 # Update a page
-wagapi pages update 15 --title "Iris Murdoch: The Sovereignty of Good"
+wagapi pages update <ID> --title "Iris Murdoch: The Sovereignty of Good"
 
 # Create and publish in one step, using a URL path as parent
 wagapi pages create testapp.BlogPage --parent /blog/ \
@@ -125,20 +125,20 @@ wagapi pages create testapp.BlogPage --parent /blog/ \
   --publish
 
 # Unpublish
-wagapi pages unpublish 15
+wagapi pages unpublish <ID>
 
 # Delete (prompts for confirmation)
-wagapi pages delete 15
+wagapi pages delete <ID>
 ```
 
 ### 7. Inspect requests
 
 ```bash
 # See HTTP request/response details
-wagapi -v pages get 6
+wagapi -v pages get <ID>
 
 # Preview without executing
-wagapi --dry-run pages create testapp.SimplePage --parent 3 --title "Test"
+wagapi --dry-run pages create testapp.SimplePage --parent /home/ --title "Test"
 ```
 
 ### 8. Pipe-friendly JSON output
@@ -154,7 +154,7 @@ Force a format with `--json` or `--human`:
 
 ```bash
 wagapi --human pages list
-wagapi --json pages get 6
+wagapi --json pages get 42
 ```
 
 ## Configuration
@@ -275,14 +275,14 @@ She argued that moral progress comes from **attention**."
 **With extra fields:**
 
 ```bash
-wagapi pages create testapp.BlogPage --parent 5 \
+wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" --field published_date:2026-04-06
 ```
 
 **Raw mode for full StreamField control:**
 
 ```bash
-wagapi pages create testapp.BlogPage --parent 5 \
+wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" --raw \
   --field 'body:[{"type":"paragraph","value":"<p>Hello</p>","id":"abc123"}]'
 ```
