@@ -68,7 +68,30 @@ def markdown_to_streamfield(text: str) -> list[dict]:
                 i += 3
                 continue
 
-        # Skip tokens we don't handle (fences, lists, etc.)
+        # Lists — render the full list to HTML and emit as a paragraph block
+        if tok.type in ("bullet_list_open", "ordered_list_open"):
+            close_type = tok.type.replace("_open", "_close")
+            # Collect all tokens belonging to this list
+            list_tokens = [tok]
+            nesting = 1
+            j = i + 1
+            while j < len(tokens) and nesting > 0:
+                if tokens[j].type == tok.type:
+                    nesting += 1
+                elif tokens[j].type == close_type:
+                    nesting -= 1
+                list_tokens.append(tokens[j])
+                j += 1
+            html = md.renderer.render(list_tokens, md.options, {}).strip()
+            blocks.append({
+                "type": "paragraph",
+                "value": html,
+                "id": _make_id(),
+            })
+            i = j
+            continue
+
+        # Skip tokens we don't handle (fences, etc.)
         i += 1
 
     return blocks

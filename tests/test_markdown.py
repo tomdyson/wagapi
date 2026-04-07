@@ -84,6 +84,40 @@ def test_empty_input():
     assert blocks == []
 
 
+def test_bullet_list():
+    blocks = markdown_to_streamfield("- Alpha\n- Beta\n- Gamma")
+    assert len(blocks) == 1
+    assert blocks[0]["type"] == "paragraph"
+    assert "<ul>" in blocks[0]["value"]
+    assert "<li>Alpha</li>" in blocks[0]["value"]
+    assert "<li>Gamma</li>" in blocks[0]["value"]
+
+
+def test_ordered_list():
+    blocks = markdown_to_streamfield("1. First\n2. Second\n3. Third")
+    assert len(blocks) == 1
+    assert blocks[0]["type"] == "paragraph"
+    assert "<ol>" in blocks[0]["value"]
+    assert "<li>First</li>" in blocks[0]["value"]
+
+
+def test_list_between_paragraphs():
+    md = """Some intro text.
+
+- Item one
+- Item two
+
+Closing paragraph."""
+    blocks = markdown_to_streamfield(md)
+    assert len(blocks) == 3
+    assert blocks[0]["type"] == "paragraph"
+    assert "intro" in blocks[0]["value"]
+    assert blocks[1]["type"] == "paragraph"
+    assert "<ul>" in blocks[1]["value"]
+    assert blocks[2]["type"] == "paragraph"
+    assert "Closing" in blocks[2]["value"]
+
+
 def test_markdown_to_richtext():
     result = markdown_to_richtext("Hello **world**")
     assert result == {"format": "markdown", "content": "Hello **world**"}
