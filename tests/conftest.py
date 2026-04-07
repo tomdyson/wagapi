@@ -16,6 +16,9 @@ SAMPLE_PAGE_TYPES = [
         "fields": ["title", "slug", "published_date", "body", "authors"],
         "allowed_parents": ["blog.BlogIndexPage"],
         "allowed_children": [],
+        "available_parents": [
+            {"id": 3, "title": "Blog", "type": "blog.BlogIndexPage", "url_path": "/blog/"},
+        ],
     },
     {
         "name": "blog.BlogIndexPage",
@@ -23,6 +26,10 @@ SAMPLE_PAGE_TYPES = [
         "fields": ["title", "slug", "intro"],
         "allowed_parents": ["wagtailcore.Page", "home.HomePage"],
         "allowed_children": ["blog.BlogPage"],
+        "available_parents": [
+            {"id": 1, "title": "Root", "type": "wagtailcore.Page", "url_path": "/"},
+            {"id": 2, "title": "Home", "type": "home.HomePage", "url_path": "/"},
+        ],
     },
 ]
 
@@ -77,6 +84,12 @@ SAMPLE_PAGE = {
         "live": False,
         "has_unpublished_changes": True,
         "parent_id": 3,
+    },
+    "hints": {
+        "publish": "wagapi pages publish 42",
+        "edit": "wagapi pages update 42 --title '...' --body '...'",
+        "view": "wagapi pages get 42",
+        "delete": "wagapi pages delete 42",
     },
 }
 
