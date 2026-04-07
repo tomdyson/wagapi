@@ -28,8 +28,7 @@ def test_paragraph():
     blocks = markdown_to_streamfield("Hello world, this is a paragraph.")
     assert len(blocks) == 1
     assert blocks[0]["type"] == "paragraph"
-    assert blocks[0]["value"]["format"] == "markdown"
-    assert blocks[0]["value"]["content"] == "Hello world, this is a paragraph."
+    assert blocks[0]["value"] == "<p>Hello world, this is a paragraph.</p>"
 
 
 def test_mixed_headings_and_paragraphs():
@@ -46,11 +45,11 @@ She argued that moral progress comes from **attention**."""
     assert blocks[0]["value"]["text"] == "Early Life"
     assert blocks[0]["value"]["size"] == "h2"
     assert blocks[1]["type"] == "paragraph"
-    assert blocks[1]["value"]["content"] == "Iris Murdoch was born in Dublin in 1919."
+    assert "Iris Murdoch was born in Dublin in 1919." in blocks[1]["value"]
     assert blocks[2]["type"] == "heading"
     assert blocks[2]["value"]["text"] == "Philosophy"
     assert blocks[3]["type"] == "paragraph"
-    assert "**attention**" in blocks[3]["value"]["content"]
+    assert "<strong>attention</strong>" in blocks[3]["value"]
 
 
 def test_image_reference():

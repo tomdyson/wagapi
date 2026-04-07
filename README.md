@@ -9,23 +9,18 @@ A CLI client for [wagtail-write-api](https://github.com/tomdyson/wagtail-write-a
 wagapi schema
 
 # Learn the fields for a page type
-wagapi schema blog.BlogPage
+wagapi schema testapp.BlogPage
 
 # Create a page with markdown body
-wagapi pages create blog.BlogPage \
-  --parent /blog/ \
-  --title "Iris Murdoch: The Sovereignty of Good" \
-  --body "## A Philosopher and Novelist
-
-Iris Murdoch (1919–1999) was an Irish-British novelist and philosopher..." \
-  --publish
+wagapi pages create testapp.BlogPage --parent /blog/ \
+  --title "Iris Murdoch" --body "A philosopher and novelist." --publish
 ```
 
 ## Installation
 
 ```bash
 # One-shot via uvx (no install needed)
-uvx wagapi pages list
+uvx wagapi schema
 
 # Or install permanently
 pip install wagapi
@@ -35,22 +30,134 @@ uv tool install wagapi
 
 **Python 3.10+ required.**
 
+## Quick start
+
+### 1. Set up a Wagtail site with wagtail-write-api
+
+Follow the [example app guide](https://tomdyson.github.io/wagtail-write-api/development/example-app/) to get a local Wagtail instance running:
+
+```bash
+cd example
+uv run python manage.py migrate
+uv run python manage.py seed_demo
+uv run python manage.py runserver
+```
+
+`seed_demo` prints API tokens for several test users:
+
+```
+--- API Tokens ---
+  admin: 25e620d83a9c4a591f5986b1b74bbd4b7365c4be
+  editor: 4fbeb9c8...
+  moderator: 6c8b9634...
+  reviewer: a2377491...
+```
+
+### 2. Configure wagapi
+
+```bash
+export WAGAPI_URL=http://localhost:8000/api/write/v1
+export WAGAPI_TOKEN=25e620d83a9c4a591f5986b1b74bbd4b7365c4be
+```
+
+Or run `wagapi init` to save credentials to `~/.wagapi.toml`.
+
+### 3. Explore the content model
+
+```bash
+wagapi schema
+```
+
+```
+testapp.SimplePage                  — "simple page"
+  Fields: title, slug, alias_of, body, id
+  Parents: wagtailcore.Page, testapp.SimplePage, testapp.EventPage
+  Children: wagtailcore.Page, testapp.SimplePage, testapp.BlogIndexPage, testapp.EventPage
+
+testapp.BlogPage                    — "blog page"
+  Fields: title, slug, alias_of, published_date, feed_image, body, authors, id
+  Parents: testapp.BlogIndexPage
+  Children: (none)
+...
+```
+
+Get the full field schema for a type:
+
+```bash
+wagapi schema testapp.BlogPage
+```
+
+### 4. Browse existing pages
+
+```bash
+wagapi pages list
+wagapi pages get 6
+```
+
+### 5. Create a page
+
+```bash
+wagapi pages create testapp.BlogPage --parent 5 \
+  --title "Iris Murdoch" \
+  --body "## A Philosopher and Novelist
+
+Iris Murdoch (1919–1999) was an Irish-British novelist and philosopher.
+
+She argued that moral progress comes from **attention**."
+```
+
+The `--body` flag accepts markdown, which is auto-converted to StreamField blocks (headings, paragraphs with rendered HTML).
+
+### 6. Publish, update, and manage
+
+```bash
+# Publish a draft (use the page ID returned by create)
+wagapi pages publish 15
+
+# Update a page
+wagapi pages update 15 --title "Iris Murdoch: The Sovereignty of Good"
+
+# Create and publish in one step, using a URL path as parent
+wagapi pages create testapp.BlogPage --parent /blog/ \
+  --title "Simone Weil" \
+  --body "Simone Weil was a French philosopher and mystic." \
+  --field published_date:2026-04-07 \
+  --publish
+
+# Unpublish
+wagapi pages unpublish 15
+
+# Delete (prompts for confirmation)
+wagapi pages delete 15
+```
+
+### 7. Inspect requests
+
+```bash
+# See HTTP request/response details
+wagapi -v pages get 6
+
+# Preview without executing
+wagapi --dry-run pages create testapp.SimplePage --parent 3 --title "Test"
+```
+
+### 8. Pipe-friendly JSON output
+
+When piped, output is JSON automatically:
+
+```bash
+wagapi pages list | jq '.items[].title'
+wagapi schema testapp.BlogPage | cat
+```
+
+Force a format with `--json` or `--human`:
+
+```bash
+wagapi --human pages list
+wagapi --json pages get 6
+```
+
 ## Configuration
-
-### Quick start
-
-```bash
-wagapi init
-```
-
-This interactively prompts for your API URL and token, tests the connection, and writes `~/.wagapi.toml`.
-
-### Environment variables
-
-```bash
-export WAGAPI_URL=https://cms.example.com/api/write/v1
-export WAGAPI_TOKEN=abc123def456
-```
 
 ### Config priority
 
@@ -69,42 +176,6 @@ Settings are resolved in this order (highest priority first):
 # ~/.wagapi.toml
 url = "https://cms.example.com/api/write/v1"
 token = "abc123def456"
-rich_text_format = "markdown"   # optional
-```
-
-## Output behaviour
-
-| Context | Format | Rationale |
-|---|---|---|
-| stdout is a TTY | Human-readable summary | User is reading |
-| stdout is piped/redirected | JSON | Consumer is a program or LLM |
-
-Override with `--json` (always JSON) or `--human` (always human-readable).
-
-**Human-readable:**
-
-```
-$ wagapi pages create blog.BlogPage --parent 3 --title "Hello"
-✓ Created page 42 "Hello" (draft)
-  Type: blog.BlogPage
-  Parent: 3
-```
-
-**JSON (same command, piped):**
-
-```
-$ wagapi pages create blog.BlogPage --parent 3 --title "Hello" | cat
-{
-  "id": 42,
-  "title": "Hello",
-  "slug": "hello",
-  "meta": {
-    "type": "blog.BlogPage",
-    "live": false,
-    "has_unpublished_changes": true,
-    "parent_id": 3
-  }
-}
 ```
 
 ## Commands
@@ -136,40 +207,14 @@ If `--url` and `--token` are both provided, skips interactive prompts.
 
 ### `wagapi schema`
 
-List all available page types:
+List all available page types, or show the full field schema for a specific type:
 
-```
-$ wagapi schema
-blog.BlogPage           — "blog page"
-  Fields: title, slug, published_date, body, authors
-  Parents: blog.BlogIndexPage
-  Children: (none)
+```bash
+wagapi schema                      # list all types
+wagapi schema testapp.BlogPage     # show fields, parents, children
 ```
 
-Show full field schema for a specific type:
-
-```
-$ wagapi schema blog.BlogPage
-blog.BlogPage — "blog page"
-
-  Required fields:
-    type          string          Page type (blog.BlogPage)
-    parent        integer         Parent page ID or URL path
-    title         string          Page title
-
-  Optional fields:
-    slug          string          Auto-generated from title if omitted
-    published_date string         Publication date
-    body          array           StreamField body content
-
-  Allowed parents: blog.BlogIndexPage
-  Allowed children: (none)
-
-  StreamField blocks:
-    body: heading, paragraph, image
-```
-
-JSON output returns the raw schema from the API verbatim, including `create_schema`, `patch_schema`, `read_schema`, and `streamfield_blocks`.
+JSON output returns the raw schema from the API verbatim, including `create_schema`, `patch_schema`, and `read_schema`.
 
 ### `wagapi pages list`
 
@@ -179,7 +224,7 @@ wagapi pages list [OPTIONS]
 
 | Option | Description |
 |---|---|
-| `--type TYPE` | Filter by page type, e.g. `blog.BlogPage` |
+| `--type TYPE` | Filter by page type, e.g. `testapp.BlogPage` |
 | `--parent ID` | Direct children of page ID |
 | `--descendant-of ID` | All descendants of page ID |
 | `--status STATUS` | `draft`, `live`, or `live+draft` |
@@ -213,20 +258,10 @@ wagapi pages create <type> --parent ID_OR_PATH --title TITLE [OPTIONS]
 | `--publish` | Publish immediately (default: create as draft) |
 | `--raw` | Treat field values as raw JSON (no auto-wrapping) |
 
-**Simple fields:**
-
-```bash
-wagapi pages create blog.BlogPage \
-  --parent 3 \
-  --title "Iris Murdoch" \
-  --field published_date:2026-04-06
-```
-
 **Markdown body (auto-converted to StreamField):**
 
 ```bash
-wagapi pages create blog.BlogPage \
-  --parent /blog/ \
+wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" \
   --body "## Early Life
 
@@ -237,22 +272,25 @@ Iris Murdoch was born in Dublin in 1919.
 She argued that moral progress comes from **attention**."
 ```
 
-This auto-wraps the markdown into StreamField blocks: `## Heading` becomes a heading block, paragraphs become paragraph blocks with `format: markdown`.
+**With extra fields:**
+
+```bash
+wagapi pages create testapp.BlogPage --parent 5 \
+  --title "Iris Murdoch" --field published_date:2026-04-06
+```
 
 **Raw mode for full StreamField control:**
 
 ```bash
-wagapi pages create blog.BlogPage \
-  --parent 3 \
-  --title "Iris Murdoch" \
-  --raw \
+wagapi pages create testapp.BlogPage --parent 5 \
+  --title "Iris Murdoch" --raw \
   --field 'body:[{"type":"paragraph","value":"<p>Hello</p>","id":"abc123"}]'
 ```
 
-**Reading from stdin:**
+**Reading body from stdin:**
 
 ```bash
-cat post.md | wagapi pages create blog.BlogPage \
+cat post.md | wagapi pages create testapp.BlogPage \
   --parent /blog/ --title "Iris Murdoch" --body -
 ```
 
@@ -280,15 +318,10 @@ wagapi pages publish 42
 wagapi pages unpublish 42
 ```
 
-### `wagapi images list`
+### `wagapi images list` / `get`
 
 ```bash
 wagapi images list [--search QUERY] [--limit N] [--offset N]
-```
-
-### `wagapi images get`
-
-```bash
 wagapi images get 7
 ```
 
@@ -301,7 +334,7 @@ When `--raw` is **not** set and a field is a StreamField, the CLI auto-converts 
 | `# Heading` | `{"type": "heading", "value": {"text": "...", "size": "h1"}}` |
 | `## Heading` | heading with `"size": "h2"` |
 | `### Heading` | heading with `"size": "h3"` |
-| Paragraph text | `{"type": "paragraph", "value": {"format": "markdown", "content": "..."}}` |
+| Paragraph text | `{"type": "paragraph", "value": "<p>...</p>"}` |
 | `![alt](wagapi:image/42)` | `{"type": "image", "value": 42}` |
 
 Each block gets a generated UUID v4 `id`.
@@ -322,11 +355,6 @@ Errors go to stderr. Exit codes:
 | 5 | Permission denied (403) |
 | 6 | Not found (404) |
 | 7 | Validation error (400/422) |
-
-```
-$ wagapi pages create blog.BlogPage --parent 2 --title "Oops"
-Error: BlogPage cannot be created under HomePage
-```
 
 ## LLM integration
 
@@ -364,10 +392,10 @@ Output is JSON when piped.
 wagapi schema | cat
 
 # Step 2: Get the BlogPage field schema
-wagapi schema blog.BlogPage | cat
+wagapi schema testapp.BlogPage | cat
 
 # Step 3: Create and publish
-wagapi pages create blog.BlogPage \
+wagapi pages create testapp.BlogPage \
   --parent /blog/ \
   --title "Iris Murdoch: The Sovereignty of Good" \
   --body "## A Philosopher and Novelist
@@ -375,27 +403,6 @@ wagapi pages create blog.BlogPage \
 Iris Murdoch (1919–1999) was an Irish-British novelist and philosopher..." \
   --field published_date:2026-04-06 \
   --publish | cat
-```
-
-## Project structure
-
-```
-wagapi/
-├── __init__.py
-├── __main__.py          # python -m wagapi / uvx entry point
-├── cli.py               # click group and global options
-├── client.py            # httpx-based API client class
-├── config.py            # config loading (env → dotfile → defaults)
-├── exceptions.py        # error types with exit codes
-├── commands/
-│   ├── init.py          # wagapi init
-│   ├── schema.py        # wagapi schema
-│   ├── pages.py         # wagapi pages *
-│   └── images.py        # wagapi images *
-├── formatting/
-│   ├── output.py        # TTY vs JSON output logic
-│   └── markdown.py      # markdown → StreamField converter
-└── py.typed
 ```
 
 ## Development

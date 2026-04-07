@@ -58,13 +58,11 @@ def markdown_to_streamfield(text: str) -> list[dict]:
                     i += 3  # skip paragraph_open, inline, paragraph_close
                     continue
 
-                # Regular paragraph — keep as markdown
+                # Regular paragraph — render markdown to HTML
+                html = md.render(inline_content).strip()
                 blocks.append({
                     "type": "paragraph",
-                    "value": {
-                        "format": "markdown",
-                        "content": inline_content,
-                    },
+                    "value": html,
                     "id": _make_id(),
                 })
                 i += 3

@@ -63,7 +63,7 @@ def cli(ctx: click.Context, url, token, output_json, output_human, verbose, dry_
     config = load_config(cli_url=url, cli_token=token)
 
     if config.is_configured:
-        obj.client = WagtailClient(config.url, config.token)
+        obj.client = WagtailClient(config.url, config.token, verbose=obj.verbose, dry_run=obj.dry_run)
 
     # Store config for commands that need it (e.g. init)
     obj._config = config

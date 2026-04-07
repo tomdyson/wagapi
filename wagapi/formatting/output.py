@@ -100,11 +100,11 @@ def format_schema_list(data: list[dict]) -> str:
         return "No page types found."
     lines = []
     for pt in data:
-        name = pt.get("name", pt.get("id", "unknown"))
+        name = pt.get("type", pt.get("name", pt.get("id", "unknown")))
         label = pt.get("verbose_name", pt.get("label", ""))
-        fields = ", ".join(pt.get("fields", [])) if pt.get("fields") else ""
-        parents = ", ".join(pt.get("allowed_parents", [])) if pt.get("allowed_parents") else ""
-        children = ", ".join(pt.get("allowed_children", [])) if pt.get("allowed_children") else ""
+        fields = ", ".join(pt.get("fields_summary", pt.get("fields", [])))
+        parents = ", ".join(pt.get("allowed_parent_types", pt.get("allowed_parents", [])))
+        children = ", ".join(pt.get("allowed_subpage_types", pt.get("allowed_children", [])))
         line = f'{name:<35} — "{label}"'
         if fields:
             line += f"\n  Fields: {fields}"
@@ -119,9 +119,10 @@ def format_schema_list(data: list[dict]) -> str:
 
 
 def format_schema_detail(data: dict) -> str:
-    name = data.get("name", data.get("id", "unknown"))
+    name = data.get("type", data.get("name", data.get("id", "unknown")))
     label = data.get("verbose_name", data.get("label", ""))
-    lines = [f'{name} — "{label}"', ""]
+    header = f'{name} — "{label}"' if label else name
+    lines = [header, ""]
 
     create_schema = data.get("create_schema", {})
     properties = create_schema.get("properties", {})
@@ -131,8 +132,13 @@ def format_schema_detail(data: dict) -> str:
         req_lines = []
         opt_lines = []
         for field_name, field_schema in properties.items():
-            ftype = field_schema.get("type", "unknown")
-            desc = field_schema.get("description", "")
+            # Handle anyOf type unions (e.g. {"anyOf": [{"type": "string"}, {"type": "null"}]})
+            ftype = field_schema.get("type", "")
+            if not ftype and "anyOf" in field_schema:
+                types = [t.get("type", t.get("format", "")) for t in field_schema["anyOf"] if t.get("type") != "null"]
+                ftype = types[0] if types else "unknown"
+            ftype = ftype or "unknown"
+            desc = field_schema.get("description", field_schema.get("title", ""))
             entry = f"    {field_name:<20} {ftype:<15} {desc}"
             if field_name in required_fields:
                 req_lines.append(entry)
@@ -148,10 +154,12 @@ def format_schema_detail(data: dict) -> str:
             lines.extend(opt_lines)
             lines.append("")
 
-    if data.get("allowed_parents"):
-        lines.append(f'  Allowed parents: {", ".join(data["allowed_parents"])}')
-    if data.get("allowed_children"):
-        lines.append(f'  Allowed children: {", ".join(data["allowed_children"])}')
+    if data.get("allowed_parent_types", data.get("allowed_parents")):
+        parents = data.get("allowed_parent_types", data.get("allowed_parents", []))
+        lines.append(f'  Allowed parents: {", ".join(parents)}')
+    if data.get("allowed_subpage_types", data.get("allowed_children")):
+        children = data.get("allowed_subpage_types", data.get("allowed_children", []))
+        lines.append(f'  Allowed children: {", ".join(children)}')
     else:
         lines.append("  Allowed children: (none)")
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json as json_mod
+import sys
 from typing import Any
 
 import httpx
@@ -17,13 +19,15 @@ from wagapi.exceptions import (
 class WagtailClient:
     """Synchronous HTTP client for the Wagtail Write API."""
 
-    def __init__(self, url: str, token: str) -> None:
+    def __init__(self, url: str, token: str, *, verbose: bool = False, dry_run: bool = False) -> None:
         self.base_url = url.rstrip("/")
         self.token = token
+        self.verbose = verbose
+        self.dry_run = dry_run
         self._http = httpx.Client(
             base_url=self.base_url,
             headers={
-                "Authorization": f"Token {token}",
+                "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
             },
             timeout=30.0,
@@ -43,6 +47,22 @@ class WagtailClient:
         json: Any = None,
         **kwargs: Any,
     ) -> Any:
+        url = f"{self.base_url}{path}"
+        if self.verbose:
+            print(f"> {method} {url}", file=sys.stderr)
+            if params:
+                print(f"> Params: {params}", file=sys.stderr)
+            if json is not None:
+                print(f"> Body: {json_mod.dumps(json, indent=2, default=str)}", file=sys.stderr)
+
+        if self.dry_run:
+            print(f"{method} {url}", file=sys.stderr)
+            if params:
+                print(f"Params: {params}", file=sys.stderr)
+            if json is not None:
+                print(json_mod.dumps(json, indent=2, default=str), file=sys.stderr)
+            return None
+
         try:
             resp = self._http.request(
                 method,
@@ -57,6 +77,9 @@ class WagtailClient:
             raise NetworkError(f"Request timed out: {exc}") from exc
         except httpx.HTTPError as exc:
             raise NetworkError(str(exc)) from exc
+
+        if self.verbose:
+            print(f"< {resp.status_code} {resp.reason_phrase}", file=sys.stderr)
 
         if resp.status_code == 204:
             return None
@@ -89,7 +112,7 @@ class WagtailClient:
         data = self._request("GET", "/schema/page-types/")
         if isinstance(data, list):
             return data
-        return data.get("items", data.get("results", [data]))
+        return data.get("page_types", data.get("items", data.get("results", [data])))
 
     def get_page_type_schema(self, page_type: str) -> dict:
         return self._request("GET", f"/schema/page-types/{page_type}/")

@@ -178,9 +178,11 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
             data["body"] = markdown_to_streamfield(body)
 
     if publish:
-        data["publish"] = True
+        data["action"] = "publish"
 
     result_data = ctx.client.create_page(data)
+    if result_data is None:
+        return
     result = output(
         result_data,
         format_page_created,
@@ -226,12 +228,14 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw):
             data["body"] = markdown_to_streamfield(body)
 
     if publish:
-        data["publish"] = True
+        data["action"] = "publish"
 
     if not data:
         raise UsageError("No fields to update. Use --title, --field, or --body.")
 
     result_data = ctx.client.update_page(page_id, data)
+    if result_data is None:
+        return
     result = output(
         result_data,
         format_page_updated,
