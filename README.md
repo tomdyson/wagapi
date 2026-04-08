@@ -106,7 +106,7 @@ Iris Murdoch (1919–1999) was an Irish-British novelist and philosopher.
 She argued that moral progress comes from **attention**."
 ```
 
-The `--field` flag auto-detects StreamField and RichTextField fields via the schema. StreamField values are converted from markdown to blocks; RichTextField values are sent as markdown for server-side conversion. Use `--streamfield FIELD:MARKDOWN` to explicitly convert without a schema fetch.
+The `--field` flag auto-detects StreamField and RichTextField fields via the schema. StreamField values are converted from markdown to blocks; RichTextField values are sent as markdown for server-side conversion. Values starting with `[` or `{` are auto-parsed as JSON.
 
 ### 6. Publish, update, and manage
 
@@ -257,13 +257,15 @@ wagapi pages create <type> --parent ID_OR_PATH --title TITLE [OPTIONS]
 | `--title TITLE` | **Required.** Page title |
 | `--slug SLUG` | URL slug (auto-generated from title if omitted) |
 | `--field KEY:VALUE` | Set a field value (repeatable). StreamField/RichTextField auto-detected via schema. Values starting with `[` or `{` are auto-parsed as JSON |
-| `--streamfield FIELD:MARKDOWN` | Explicitly set a StreamField from markdown (repeatable). No schema fetch needed. Use `-` as value for stdin |
 | `--publish` | Publish immediately (default: create as draft) |
-| `--raw` | Treat field values as raw JSON (no auto-wrapping, no auto-detection) |
 
-**Auto-detected StreamField conversion:**
+**Auto-detected field conversion:**
 
-`--field` checks the page type schema. If the field is a StreamField, the value is auto-converted from markdown to blocks. If it's a RichTextField, it's sent as markdown for server-side conversion.
+`--field` fetches the page type schema and auto-detects the field type:
+- **StreamField**: markdown is converted to blocks
+- **RichTextField**: markdown is sent as-is for server-side conversion
+- **JSON values**: arrays (`[...]`) and objects (`{...}`) are auto-parsed
+- **Other fields**: sent as plain strings
 
 ```bash
 wagapi pages create testapp.BlogPage --parent /blog/ \
@@ -277,16 +279,6 @@ Iris Murdoch was born in Dublin in 1919.
 She argued that moral progress comes from **attention**."
 ```
 
-**Explicit StreamField (no schema fetch):**
-
-```bash
-wagapi pages create testapp.BlogPage --parent /blog/ \
-  --title "Iris Murdoch" \
-  --streamfield "body:## Early Life
-
-Born in Dublin in 1919."
-```
-
 **With extra fields:**
 
 ```bash
@@ -297,26 +289,20 @@ wagapi pages create testapp.BlogPage --parent /blog/ \
 **JSON field values (auto-detected):**
 
 ```bash
-# Arrays and objects are auto-parsed — no --raw needed
+# Arrays and objects are auto-parsed as JSON
 wagapi pages create testapp.BlogPage --parent /blog/ \
   --title "Iris Murdoch" \
   --field 'authors:[{"name": "Jo", "role": "Writer"}]' \
   --field published_date:2026-04-06
 ```
 
-**Raw mode for full StreamField control:**
+**Full StreamField JSON control:**
 
 ```bash
+# Pass pre-built StreamField blocks as a JSON array
 wagapi pages create testapp.BlogPage --parent /blog/ \
-  --title "Iris Murdoch" --raw \
+  --title "Iris Murdoch" \
   --field 'body:[{"type":"paragraph","value":"<p>Hello</p>","id":"abc123"}]'
-```
-
-**Reading StreamField from stdin:**
-
-```bash
-cat post.md | wagapi pages create testapp.BlogPage \
-  --parent /blog/ --title "Iris Murdoch" --streamfield "body:-"
 ```
 
 ### `wagapi pages update`
@@ -388,7 +374,7 @@ The `<type>` argument is always required (e.g. `testapp.Category`) because each 
 
 ## Markdown-to-StreamField conversion
 
-When `--raw` is **not** set and a field is a StreamField, the CLI auto-converts markdown into blocks:
+When a field is a StreamField (auto-detected via schema), the CLI converts markdown into blocks:
 
 | Markdown | StreamField block |
 |---|---|
@@ -402,7 +388,7 @@ When `--raw` is **not** set and a field is a StreamField, the CLI auto-converts 
 
 Each block gets a generated UUID v4 `id`.
 
-The auto-wrapper only produces `heading`, `paragraph`, and `image` blocks. For other block types (e.g. `quote`, `embed`, `code`), use `--raw` mode.
+The auto-wrapper only produces `heading`, `paragraph`, and `image` blocks. For other block types (e.g. `quote`, `embed`, `code`), pass pre-built JSON: `--field 'body:[{"type":"quote","value":"..."}]'`.
 
 ## Error handling
 
@@ -434,8 +420,8 @@ Key commands:
   wagapi schema [type]                   — discover content model and block schemas
   wagapi pages list [--type T] [--slug S] [--path P]  — list/find pages
   wagapi pages get <id>                  — read page detail (latest draft)
-  wagapi pages create <type> --parent ID_OR_PATH --title T [--field K:V]... [--streamfield K:MD]... [--publish]
-  wagapi pages update <id> [--type T] [--field K:V]... [--streamfield K:MD]... [--append-block JSON]... [--insert-block IDX JSON]... [--publish]
+  wagapi pages create <type> --parent ID_OR_PATH --title T [--field K:V]... [--publish]
+  wagapi pages update <id> [--type T] [--field K:V]... [--append-block JSON]... [--insert-block IDX JSON]... [--publish]
   wagapi pages delete <id> --yes
   wagapi pages publish <id>
   wagapi snippets list <type>             — list snippets of a type
@@ -445,8 +431,7 @@ Key commands:
 
 The --parent flag accepts a page ID or a URL path (e.g. --parent /blog/).
 --field auto-detects StreamField and RichTextField via schema — just pass markdown.
-Use --streamfield FIELD:MARKDOWN for explicit conversion without a schema fetch.
-Use --raw for full StreamField JSON control.
+Values starting with [ or { are auto-parsed as JSON for full StreamField control.
 To add a block (e.g. an image) to an existing page without replacing the whole body:
   wagapi pages update <id> --append-block '{"type":"image","value":<image_id>}'
   wagapi pages update <id> --insert-block <position> '{"type":"image","value":<image_id>}'

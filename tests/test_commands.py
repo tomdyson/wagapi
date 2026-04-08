@@ -158,8 +158,12 @@ def test_pages_create(runner):
 
 
 @respx.mock
-def test_pages_create_with_streamfield_flag(runner):
-    """--streamfield converts markdown to StreamField blocks."""
+def test_pages_create_with_field_streamfield_auto(runner):
+    """--field auto-detects StreamField via schema and converts markdown to blocks."""
+    schema = {"streamfield_blocks": {"body": [{"type": "heading"}, {"type": "paragraph"}]}}
+    respx.get(f"{BASE_URL}/schema/blog.BlogPage/").mock(
+        return_value=Response(200, json=schema)
+    )
     data = {
         "id": 43,
         "title": "Iris",
@@ -176,7 +180,7 @@ def test_pages_create_with_streamfield_flag(runner):
                 "pages", "create", "blog.BlogPage",
                 "--parent", "3",
                 "--title", "Iris",
-                "--streamfield", "body:## Early Life\n\nBorn in Dublin.",
+                "--field", "body:## Early Life\n\nBorn in Dublin.",
             ],
         )
     assert result.exit_code == 0
@@ -208,7 +212,8 @@ def test_pages_create_with_path_parent(runner):
 
 
 @respx.mock
-def test_pages_create_raw(runner):
+def test_pages_create_json_field_auto_parsed(runner):
+    """JSON arrays in --field are auto-parsed (no --raw needed)."""
     data = {
         "id": 45,
         "title": "Raw",
@@ -226,7 +231,6 @@ def test_pages_create_raw(runner):
                 "pages", "create", "blog.BlogPage",
                 "--parent", "3",
                 "--title", "Raw",
-                "--raw",
                 "--field", f"body:{body_json}",
             ],
         )
@@ -654,11 +658,37 @@ def test_pages_update_append_multiple_blocks(runner):
     assert request_body["body"][1]["type"] == "paragraph"
 
 
-def test_pages_update_block_ops_with_streamfield_coexist(runner):
-    """--append-block and --streamfield can coexist (different fields)."""
-    # This just checks the CLI accepts both flags without error at parse time.
-    # The actual behaviour depends on the API response.
-    pass
+def test_raw_flag_removed(runner):
+    """--raw flag no longer exists."""
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            [
+                "pages", "create", "blog.BlogPage",
+                "--parent", "3",
+                "--title", "Test",
+                "--raw",
+                "--field", "body:hello",
+            ],
+        )
+    assert result.exit_code != 0
+    assert "No such option" in result.output or "no such option" in result.output.lower()
+
+
+def test_streamfield_flag_removed(runner):
+    """--streamfield flag no longer exists."""
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(
+            cli,
+            [
+                "pages", "create", "blog.BlogPage",
+                "--parent", "3",
+                "--title", "Test",
+                "--streamfield", "body:hello",
+            ],
+        )
+    assert result.exit_code != 0
+    assert "No such option" in result.output or "no such option" in result.output.lower()
 
 
 @respx.mock
@@ -732,7 +762,7 @@ def test_pages_update_append_preserves_existing_id(runner):
     assert request_body["body"][0]["id"] == "keep-me"
 
 
-# -- --field auto-detection and --streamfield tests ----------------------------
+# -- --field auto-detection tests -----------------------------------------------
 
 
 @respx.mock
@@ -828,35 +858,12 @@ def test_create_field_non_streamfield_untouched(runner):
 
 
 @respx.mock
-def test_create_streamfield_flag(runner):
-    """--streamfield converts markdown without a schema fetch."""
-    data = {
-        "id": 63, "title": "SF", "slug": "sf",
-        "meta": {"type": "blog.BlogPage", "live": False, "parent_id": 3},
-    }
-    route = respx.post(f"{BASE_URL}/pages/").mock(
-        return_value=Response(201, json=data)
+def test_create_field_json_array_skips_streamfield_conversion(runner):
+    """--field with JSON array value is auto-parsed, not converted from markdown."""
+    schema = {"streamfield_blocks": {"body": [{"type": "paragraph"}]}}
+    respx.get(f"{BASE_URL}/schema/blog.BlogPage/").mock(
+        return_value=Response(200, json=schema)
     )
-    with mock.patch.dict("os.environ", ENV):
-        result = runner.invoke(
-            cli,
-            [
-                "pages", "create", "blog.BlogPage",
-                "--parent", "3",
-                "--title", "SF",
-                "--streamfield", "content:## Heading\n\nParagraph here.",
-            ],
-        )
-    assert result.exit_code == 0
-    request_body = json.loads(route.calls[0].request.content)
-    assert isinstance(request_body["content"], list)
-    assert request_body["content"][0]["type"] == "heading"
-    assert request_body["content"][1]["type"] == "paragraph"
-
-
-@respx.mock
-def test_create_raw_skips_detection(runner):
-    """--raw skips auto-detection, no schema fetch."""
     data = {
         "id": 64, "title": "Raw", "slug": "raw",
         "meta": {"type": "blog.BlogPage", "live": False, "parent_id": 3},
@@ -872,7 +879,6 @@ def test_create_raw_skips_detection(runner):
                 "pages", "create", "blog.BlogPage",
                 "--parent", "3",
                 "--title", "Raw",
-                "--raw",
                 "--field", f"body:{body_json}",
             ],
         )
@@ -945,34 +951,15 @@ def test_update_without_type_flag_auto_detects(runner):
     assert request_body["body"][0]["type"] == "heading"
 
 
-@respx.mock
-def test_create_streamfield_flag_with_remap(runner):
-    """--streamfield respects block remapping when schema is available via --field."""
-    schema = {"streamfield_blocks": {"body": [{"type": "text"}, {"type": "map_embed"}]}}
-    respx.get(f"{BASE_URL}/schema/events.EventPage/").mock(
-        return_value=Response(200, json=schema)
-    )
-    data = {
-        "id": 65, "title": "Ev", "slug": "ev",
-        "meta": {"type": "events.EventPage", "live": False, "parent_id": 3},
-    }
-    route = respx.post(f"{BASE_URL}/pages/").mock(
-        return_value=Response(201, json=data)
-    )
+def test_snippets_raw_flag_removed(runner):
+    """--raw flag no longer exists on snippets create."""
     with mock.patch.dict("os.environ", ENV):
         result = runner.invoke(
             cli,
-            [
-                "pages", "create", "events.EventPage",
-                "--parent", "3",
-                "--title", "Ev",
-                "--field", "body:Hello world",
-            ],
+            ["snippets", "create", "testapp.Category", "--raw", "--field", "name:Test"],
         )
-    assert result.exit_code == 0
-    request_body = json.loads(route.calls[0].request.content)
-    # paragraph should be remapped to text
-    assert request_body["body"][0]["type"] == "text"
+    assert result.exit_code != 0
+    assert "No such option" in result.output or "no such option" in result.output.lower()
 
 
 @respx.mock

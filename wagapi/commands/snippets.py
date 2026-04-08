@@ -80,10 +80,9 @@ def get(ctx: Context, snippet_type: str, snippet_id: int):
 @snippets.command()
 @click.argument("snippet_type")
 @click.option("--field", "fields", multiple=True, help="Set field value as KEY:VALUE (repeatable)")
-@click.option("--raw", is_flag=True, help="Treat all field values as raw JSON")
 @pass_ctx
 @handle_api_errors
-def create(ctx: Context, snippet_type, fields, raw):
+def create(ctx: Context, snippet_type, fields):
     """Create a new snippet."""
     if not ctx.client:
         raise UsageError(
@@ -91,7 +90,7 @@ def create(ctx: Context, snippet_type, fields, raw):
         )
 
     data = {"type": snippet_type}
-    field_data = _parse_fields(fields, raw)
+    field_data = _parse_fields(fields)
     data.update(field_data)
 
     result_data = ctx.client.create_snippet(data)
@@ -110,17 +109,16 @@ def create(ctx: Context, snippet_type, fields, raw):
 @click.argument("snippet_type")
 @click.argument("snippet_id", type=int)
 @click.option("--field", "fields", multiple=True, help="Set field value as KEY:VALUE (repeatable)")
-@click.option("--raw", is_flag=True, help="Treat all field values as raw JSON")
 @pass_ctx
 @handle_api_errors
-def update(ctx: Context, snippet_type, snippet_id, fields, raw):
+def update(ctx: Context, snippet_type, snippet_id, fields):
     """Update a snippet."""
     if not ctx.client:
         raise UsageError(
             "Not configured. Run 'wagapi init' or set WAGAPI_URL and WAGAPI_TOKEN."
         )
 
-    field_data = _parse_fields(fields, raw)
+    field_data = _parse_fields(fields)
     if not field_data:
         raise UsageError("No fields to update. Use --field KEY:VALUE.")
 
