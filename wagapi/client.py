@@ -117,6 +117,16 @@ class WagtailClient:
     def get_page_type_schema(self, page_type: str) -> dict:
         return self._request("GET", f"/schema/{page_type}/")
 
+    def get_streamfield_names(self, page_type: str) -> set[str]:
+        """Return the set of field names that are StreamFields."""
+        schema = self.get_page_type_schema(page_type)
+        return set(schema.get("streamfield_blocks", {}).keys())
+
+    def get_richtext_names(self, page_type: str) -> set[str]:
+        """Return the set of field names that are RichTextFields."""
+        schema = self.get_page_type_schema(page_type)
+        return set(schema.get("richtext_fields", []))
+
     # -- pages ---------------------------------------------------------------
 
     def list_pages(self, **filters: Any) -> dict:

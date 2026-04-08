@@ -29,24 +29,6 @@ def _require_client(ctx: Context):
         )
 
 
-def _get_streamfield_info(ctx: Context, page_type: str, field_name: str) -> tuple[bool, list[str]]:
-    """Check if a field is a StreamField and return (is_streamfield, allowed_block_types)."""
-    try:
-        schema = ctx.client.get_page_type_schema(page_type)
-        sf_blocks = schema.get("streamfield_blocks", {})
-        if field_name in sf_blocks:
-            blocks = sf_blocks[field_name]
-            if isinstance(blocks, list):
-                types = [b.get("type", b.get("name", "")) for b in blocks]
-            elif isinstance(blocks, dict):
-                types = list(blocks.keys())
-            else:
-                types = []
-            return True, types
-        return False, []
-    except Exception:
-        return True, []  # default to StreamField if schema lookup fails
-
 
 _BLOCK_REMAPS = {
     "paragraph": ["text", "rich_text", "richtext"],
@@ -89,13 +71,22 @@ def _parse_parent(value: str) -> int | str:
 
 
 def _parse_fields(
-    fields: tuple[str, ...], raw: bool
+    fields: tuple[str, ...],
+    raw: bool,
+    streamfield_names: set[str] | None = None,
+    richtext_names: set[str] | None = None,
+    schema_info: dict | None = None,
 ) -> dict:
     """Parse --field KEY:VALUE pairs into a dict.
 
     Values that look like JSON arrays or objects are auto-detected and
     parsed regardless of the ``raw`` flag.  When ``raw`` is True, *all*
     values are attempted as JSON (including bare numbers and strings).
+
+    When ``streamfield_names`` is provided, fields whose key appears in the
+    set are auto-converted from markdown to StreamField blocks.  When
+    ``richtext_names`` is provided, matching fields are wrapped in the
+    richtext format dict.
     """
     result = {}
     for field in fields:
@@ -107,6 +98,23 @@ def _parse_fields(
                 value = json.loads(value)
             except json.JSONDecodeError:
                 pass  # keep as string if not valid JSON
+        elif streamfield_names and key in streamfield_names:
+            blocks = markdown_to_streamfield(value)
+            # Apply block remapping if schema_info is available
+            if schema_info:
+                sf_blocks = schema_info.get("streamfield_blocks", {})
+                if key in sf_blocks:
+                    block_list = sf_blocks[key]
+                    if isinstance(block_list, list):
+                        allowed = [b.get("type", b.get("name", "")) for b in block_list]
+                    elif isinstance(block_list, dict):
+                        allowed = list(block_list.keys())
+                    else:
+                        allowed = []
+                    blocks = _remap_blocks(blocks, allowed)
+            value = blocks
+        elif richtext_names and key in richtext_names:
+            value = markdown_to_richtext(value)
         result[key] = value
     return result
 
@@ -224,18 +232,34 @@ def get(ctx: Context, page_id: str, version: str | None):
     click.echo(result)
 
 
+def _parse_streamfields(streamfields: tuple[str, ...]) -> dict:
+    """Parse --streamfield FIELD:MARKDOWN pairs, converting markdown to blocks."""
+    result = {}
+    for sf in streamfields:
+        if ":" not in sf:
+            raise UsageError(f"Invalid streamfield format '{sf}'. Expected FIELD:MARKDOWN")
+        key, value = sf.split(":", 1)
+        if value == "-":
+            value = sys.stdin.read()
+        result[key] = markdown_to_streamfield(value)
+    return result
+
+
 @pages.command()
 @click.argument("page_type")
 @click.option("--parent", required=True, help="Parent page ID or URL path")
 @click.option("--title", required=True, help="Page title")
 @click.option("--slug", default=None, help="URL slug (auto-generated if omitted)")
 @click.option("--field", "fields", multiple=True, help="Set field value as KEY:VALUE (repeatable)")
-@click.option("--body", default=None, help="Body content (markdown). Use '-' for stdin.")
+@click.option(
+    "--streamfield", "streamfields", multiple=True,
+    help="Set StreamField as FIELD:MARKDOWN (repeatable). Use '-' as value for stdin.",
+)
 @click.option("--publish", is_flag=True, help="Publish immediately")
 @click.option("--raw", is_flag=True, help="Treat field values as raw JSON")
 @pass_ctx
 @handle_api_errors
-def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, raw):
+def create(ctx: Context, page_type, parent, title, slug, fields, streamfields, publish, raw):
     """Create a new page."""
     _require_client(ctx)
 
@@ -248,25 +272,25 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
     if slug:
         data["slug"] = slug
 
-    # Parse --field options
-    field_data = _parse_fields(fields, raw)
+    # Fetch schema for auto-detection when there are --field values and not --raw
+    streamfield_names = None
+    richtext_names = None
+    schema_info = None
+    if fields and not raw:
+        try:
+            schema_info = ctx.client.get_page_type_schema(page_type)
+            streamfield_names = set(schema_info.get("streamfield_blocks", {}).keys())
+            richtext_names = set(schema_info.get("richtext_fields", []))
+        except Exception:
+            pass  # schema lookup failed, skip auto-detection
+
+    # Parse --field options (with auto-detection)
+    field_data = _parse_fields(fields, raw, streamfield_names, richtext_names, schema_info)
     data.update(field_data)
 
-    # Handle --body
-    if body is not None:
-        if body == "-":
-            body = sys.stdin.read()
-        if raw:
-            try:
-                data["body"] = json.loads(body)
-            except json.JSONDecodeError:
-                data["body"] = body
-        else:
-            is_sf, allowed_types = _get_streamfield_info(ctx, page_type, "body")
-            if is_sf:
-                data["body"] = _remap_blocks(markdown_to_streamfield(body), allowed_types)
-            else:
-                data["body"] = markdown_to_richtext(body)
+    # Parse --streamfield options (explicit, no schema needed)
+    sf_data = _parse_streamfields(streamfields)
+    data.update(sf_data)
 
     if publish:
         data["action"] = "publish"
@@ -287,8 +311,12 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
 @click.argument("page_id", type=int)
 @click.option("--title", default=None, help="Page title")
 @click.option("--slug", default=None, help="URL slug")
+@click.option("--type", "page_type", default=None, help="Page type (enables auto StreamField detection)")
 @click.option("--field", "fields", multiple=True, help="Set field value as KEY:VALUE (repeatable)")
-@click.option("--body", default=None, help="Body content (markdown). Use '-' for stdin.")
+@click.option(
+    "--streamfield", "streamfields", multiple=True,
+    help="Set StreamField as FIELD:MARKDOWN (repeatable). Use '-' as value for stdin.",
+)
 @click.option("--publish", is_flag=True, help="Publish after update")
 @click.option("--raw", is_flag=True, help="Treat field values as raw JSON")
 @click.option(
@@ -302,8 +330,8 @@ def create(ctx: Context, page_type, parent, title, slug, fields, body, publish, 
 )
 @pass_ctx
 @handle_api_errors
-def update(ctx: Context, page_id, title, slug, fields, body, publish, raw,
-           append_blocks, insert_blocks):
+def update(ctx: Context, page_id, title, slug, page_type, fields, streamfields,
+           publish, raw, append_blocks, insert_blocks):
     """Update an existing page (PATCH semantics).
 
     Use --append-block or --insert-block to add blocks to an existing
@@ -312,14 +340,11 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw,
 
     \b
     Examples:
+      wagapi pages update 42 --field "body:## New content"
       wagapi pages update 42 --append-block '{"type":"image","value":7}'
       wagapi pages update 42 --insert-block 1 '{"type":"paragraph","value":"<p>New</p>"}'
     """
     _require_client(ctx)
-
-    has_block_ops = bool(append_blocks or insert_blocks)
-    if has_block_ops and body is not None:
-        raise UsageError("Cannot use --append-block/--insert-block together with --body.")
 
     data: dict = {}
 
@@ -328,36 +353,54 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw,
     if slug:
         data["slug"] = slug
 
-    field_data = _parse_fields(fields, raw)
+    # Fetch schema for auto-detection when there are --field values and not --raw
+    streamfield_names = None
+    richtext_names = None
+    schema_info = None
+    need_page_fetch = False
+
+    if fields and not raw:
+        if page_type:
+            # --type provided: fetch schema directly (one request)
+            try:
+                schema_info = ctx.client.get_page_type_schema(page_type)
+                streamfield_names = set(schema_info.get("streamfield_blocks", {}).keys())
+                richtext_names = set(schema_info.get("richtext_fields", []))
+            except Exception:
+                pass
+        else:
+            # No --type: fetch page to learn type, then fetch schema
+            need_page_fetch = True
+            try:
+                page_data = ctx.client.get_page(page_id)
+                page_type = page_data.get("meta", {}).get("type", "")
+                if page_type:
+                    schema_info = ctx.client.get_page_type_schema(page_type)
+                    streamfield_names = set(schema_info.get("streamfield_blocks", {}).keys())
+                    richtext_names = set(schema_info.get("richtext_fields", []))
+            except Exception:
+                pass
+
+    field_data = _parse_fields(fields, raw, streamfield_names, richtext_names, schema_info)
     data.update(field_data)
 
-    if body is not None:
-        if body == "-":
-            body = sys.stdin.read()
-        if raw:
-            try:
-                data["body"] = json.loads(body)
-            except json.JSONDecodeError:
-                data["body"] = body
-        else:
-            # Fetch page to determine its type, then check schema
-            page_data = ctx.client.get_page(page_id)
-            page_type = page_data.get("meta", {}).get("type", "")
-            is_sf, allowed_types = _get_streamfield_info(ctx, page_type, "body")
-            if is_sf:
-                data["body"] = _remap_blocks(markdown_to_streamfield(body), allowed_types)
-            else:
-                data["body"] = markdown_to_richtext(body)
+    # Parse --streamfield options (explicit, no schema needed)
+    sf_data = _parse_streamfields(streamfields)
+    data.update(sf_data)
+
+    has_block_ops = bool(append_blocks or insert_blocks)
 
     if has_block_ops:
-        page_data = ctx.client.get_page(page_id)
+        # Need to fetch existing body for block operations
+        if not need_page_fetch:
+            page_data = ctx.client.get_page(page_id)
         existing_body = page_data.get("body")
         if existing_body is None:
             existing_body = []
         if not isinstance(existing_body, list):
             raise UsageError(
                 "body field is not a StreamField (not a JSON array). "
-                "Use --body instead."
+                "Use --field instead."
             )
         new_body = list(existing_body)
 
@@ -399,7 +442,7 @@ def update(ctx: Context, page_id, title, slug, fields, body, publish, raw,
         data["action"] = "publish"
 
     if not data:
-        raise UsageError("No fields to update. Use --title, --field, --body, --append-block, or --insert-block.")
+        raise UsageError("No fields to update. Use --title, --field, --streamfield, --append-block, or --insert-block.")
 
     result_data = ctx.client.update_page(page_id, data)
     if result_data is None:

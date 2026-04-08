@@ -87,7 +87,7 @@ SAMPLE_PAGE = {
     },
     "hints": {
         "publish": "wagapi pages publish 42",
-        "edit": "wagapi pages update 42 --title '...' --body '...'",
+        "edit": "wagapi pages update 42 --title '...' --field 'body:...'",
         "view": "wagapi pages get 42",
         "delete": "wagapi pages delete 42",
     },

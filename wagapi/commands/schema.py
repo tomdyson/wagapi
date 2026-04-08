@@ -25,6 +25,8 @@ def _build_example_command(type_name: str, data: dict, *, is_snippet: bool = Fal
     else:
         parts = [f"wagapi pages create {type_name}", "--parent <ID_OR_PATH>"]
 
+    streamfield_names = set(data.get("streamfield_blocks", {}).keys())
+
     for field_name in properties:
         if field_name in skip:
             continue
@@ -32,9 +34,9 @@ def _build_example_command(type_name: str, data: dict, *, is_snippet: bool = Fal
             continue
         prop = properties[field_name]
 
-        # StreamField body → use --body flag (pages only)
-        if not is_snippet and field_name == "body" and prop.get("type") == "array":
-            parts.append('--body "Your content here (markdown)"')
+        # StreamField → show --field with markdown hint
+        if not is_snippet and field_name in streamfield_names:
+            parts.append(f'--field "{field_name}:Your content here (markdown)"')
             continue
 
         # Derive a placeholder from the field type
