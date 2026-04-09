@@ -214,10 +214,16 @@ def format_schema_detail(data: dict) -> str:
                 ftype = types[0] if types else "unknown"
             ftype = ftype or "unknown"
             # Use Wagtail-specific type names for clarity
+            widget = field_schema.get("widget", "")
             if field_name in streamfield_fields:
                 ftype = "StreamField"
             elif field_name in richtext_fields:
                 ftype = "RichText"
+            elif widget == "image_chooser":
+                ftype = "Image FK"
+            elif widget == "snippet_chooser":
+                snippet_type = field_schema.get("snippet_type", "")
+                ftype = f"Snippet FK ({snippet_type})" if snippet_type else "Snippet FK"
             desc = field_schema.get("description", field_schema.get("title", ""))
             entry = f"    {field_name:<20} {ftype:<15} {desc}"
             if field_name in required_fields:

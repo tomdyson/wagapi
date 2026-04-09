@@ -40,8 +40,13 @@ def _build_example_command(type_name: str, data: dict, *, is_snippet: bool = Fal
             continue
 
         # Derive a placeholder from the field type
+        widget = prop.get("widget", "")
         ftype = prop.get("type", "")
-        if ftype == "string":
+        if widget == "image_chooser":
+            parts.append(f"--field {field_name}:<IMAGE_ID>")
+        elif widget == "snippet_chooser":
+            parts.append(f"--field {field_name}:<SNIPPET_ID>")
+        elif ftype == "string":
             parts.append(f'--field {field_name}:"..."')
         elif ftype == "integer":
             parts.append(f"--field {field_name}:<ID>")
