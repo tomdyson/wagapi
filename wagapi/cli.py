@@ -24,6 +24,32 @@ class Context:
 
 pass_ctx = click.make_pass_decorator(Context, ensure=True)
 
+_GLOBAL_FLAG_HINT = (
+    "Hint: global flags must come before subcommands, "
+    "e.g. `wagapi --human pages list`."
+)
+_GLOBAL_FLAGS = {"--json", "--human", "--verbose", "-v", "--dry-run"}
+
+
+class HelpfulGroup(click.Group):
+    """Group that adds guidance for common misplaced global flags."""
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except click.NoSuchOption as exc:
+            option = exc.option_name or ""
+            if not option.startswith("-"):
+                if len(option) == 1:
+                    option = f"-{option}"
+                else:
+                    option = f"--{option}"
+
+            if option in _GLOBAL_FLAGS:
+                message = f"{exc.format_message()}\n{_GLOBAL_FLAG_HINT}"
+                raise click.UsageError(message, ctx=exc.ctx) from exc
+            raise
+
 
 def handle_api_errors(fn):
     """Decorator that catches WagapiError and exits with the right code."""
@@ -52,7 +78,7 @@ def handle_api_errors(fn):
     return wrapper
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=HelpfulGroup, invoke_without_command=True)
 @click.version_option(package_name="wagapi")
 @click.option("--url", envvar="WAGAPI_URL", default=None, help="API base URL")
 @click.option("--token", envvar="WAGAPI_TOKEN", default=None, help="API token")

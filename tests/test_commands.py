@@ -979,6 +979,16 @@ def test_body_flag_removed(runner):
     assert "No such option" in result.output or "no such option" in result.output.lower()
 
 
+def test_misplaced_global_flag_shows_hint(runner):
+    """Misplaced global flags show a command-ordering hint."""
+    with mock.patch.dict("os.environ", ENV):
+        result = runner.invoke(cli, ["pages", "list", "--human"])
+    assert result.exit_code != 0
+    assert "No such option: --human" in result.output
+    assert "global flags must come before subcommands" in result.output
+    assert "wagapi --human pages list" in result.output
+
+
 # -- images upload tests -------------------------------------------------------
 
 
