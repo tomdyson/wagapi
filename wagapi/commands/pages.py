@@ -207,9 +207,10 @@ def find(ctx: Context, query: str, page_type: str | None):
 @pages.command()
 @click.argument("page_id")
 @click.option("--version", default=None, help="Version to retrieve (e.g. 'live')")
+@click.option("--html", "use_html", is_flag=True, help="Return rich text as HTML instead of Markdown")
 @pass_ctx
 @handle_api_errors
-def get(ctx: Context, page_id: str, version: str | None):
+def get(ctx: Context, page_id: str, version: str | None, use_html: bool):
     """Get page detail by ID or URL path."""
     _require_client(ctx)
     if page_id.startswith("/"):
@@ -220,7 +221,8 @@ def get(ctx: Context, page_id: str, version: str | None):
         page_id = items[0]["id"]
     else:
         page_id = int(page_id)
-    data = ctx.client.get_page(page_id, version=version)
+    rich_text_format = "html" if use_html else "markdown"
+    data = ctx.client.get_page(page_id, version=version, rich_text_format=rich_text_format)
     result = output(
         data,
         format_page_detail,

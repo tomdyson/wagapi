@@ -134,10 +134,18 @@ class WagtailClient:
         params = {k: v for k, v in filters.items() if v is not None}
         return self._request("GET", "/pages/", params=params)
 
-    def get_page(self, page_id: int, *, version: str | None = None) -> dict:
+    def get_page(
+        self,
+        page_id: int,
+        *,
+        version: str | None = None,
+        rich_text_format: str | None = "markdown",
+    ) -> dict:
         params = {}
         if version:
             params["version"] = version
+        if rich_text_format:
+            params["rich_text_format"] = rich_text_format
         return self._request("GET", f"/pages/{page_id}/", params=params or None)
 
     def create_page(self, data: dict) -> dict:

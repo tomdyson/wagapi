@@ -243,7 +243,15 @@ wagapi pages list [OPTIONS]
 ```bash
 wagapi pages get 42
 wagapi pages get 42 --version live
+wagapi pages get 42 --html          # rich text as HTML instead of Markdown
 ```
+
+Rich text fields are returned as **Markdown** by default. Use `--html` to get the original HTML instead.
+
+| Option | Description |
+|---|---|
+| `--version VERSION` | `live` to get published version (default: latest draft) |
+| `--html` | Return rich text fields as HTML instead of Markdown |
 
 ### `wagapi pages create`
 
@@ -419,7 +427,7 @@ Before creating or updating pages:
 Key commands:
   wagapi schema [type]                   — discover content model and block schemas
   wagapi pages list [--type T] [--slug S] [--path P]  — list/find pages
-  wagapi pages get <id>                  — read page detail (latest draft)
+  wagapi pages get <id>                  — read page detail (rich text as Markdown)
   wagapi pages create <type> --parent ID_OR_PATH --title T [--field K:V]... [--publish]
   wagapi pages update <id> [--type T] [--field K:V]... [--append-block JSON]... [--insert-block IDX JSON]... [--publish]
   wagapi pages delete <id> --yes
