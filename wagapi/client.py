@@ -29,6 +29,7 @@ class WagtailClient:
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
+                "X-Hints": "wagapi",
             },
             timeout=30.0,
         )
